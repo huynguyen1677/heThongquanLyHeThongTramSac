@@ -1,5 +1,5 @@
 export class MeterTimer {
-  constructor(ocppClient, connectorId) {
+  constructor(connectorId, ocppClient) {
     this.ocppClient = ocppClient;
     this.connectorId = connectorId;
     this.timer = null;

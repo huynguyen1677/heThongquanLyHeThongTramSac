@@ -188,27 +188,29 @@ export class OcppWebSocketServer {
   async handleBootNotification(stationId, messageId, payload) {
     logger.info(`BootNotification from ${stationId}:`, payload);
     
-    // Update station info
-    sessions.updateStationInfo(stationId, {
-      vendor: payload.chargePointVendor,
-      model: payload.chargePointModel,
-      firmware: payload.firmwareVersion,
-      serialNumber: payload.chargePointSerialNumber,
-      lastBootTime: getTimestamp()
-    });
-
-    // Initialize persistent connectors using connector service
     try {
-      await connectorService.initializeConnectors(stationId);
-      logger.info(`✅ Initialized persistent connectors for station ${stationId}`);
-    } catch (error) {
-      logger.error(`❌ Failed to initialize connectors for ${stationId}:`, error);
-    }
+      // Update station info
+      sessions.updateStationInfo(stationId, {
+        vendor: payload.chargePointVendor,
+        model: payload.chargePointModel,
+        firmware: payload.firmwareVersion,
+        serialNumber: payload.chargePointSerialNumber,
+        lastBootTime: getTimestamp()
+      });
+      logger.info(`✅ Updated station info for ${stationId}`);
 
-    // Send response
-    try {
+      // Initialize persistent connectors using connector service
+      try {
+        await connectorService.initializeConnectors(stationId);
+        logger.info(`✅ Initialized persistent connectors for station ${stationId}`);
+      } catch (error) {
+        logger.error(`❌ Failed to initialize connectors for ${stationId}:`, error);
+        // Continue anyway - don't let connector init failure block BootNotification response
+      }
+
+      // Send response
       const currentTime = getTimestamp();
-      logger.info(`Current timestamp: ${currentTime}`);
+      logger.info(`📅 Current timestamp: ${currentTime}`);
       
       const response = {
         status: 'Accepted',
@@ -216,16 +218,24 @@ export class OcppWebSocketServer {
         interval: 300 // Heartbeat interval in seconds
       };
 
-      logger.info(`BootNotification response: ${JSON.stringify(response)}`);
+      logger.info(`📤 About to send BootNotification response: ${JSON.stringify(response)}`);
       this.sendCallResult(stationId, messageId, response);
+      logger.info(`✅ BootNotification response sent successfully for ${stationId}`);
+      
     } catch (error) {
-      logger.error(`Error creating BootNotification response:`, error);
+      logger.error(`❌ Error in handleBootNotification for ${stationId}:`, error);
       // Send a simple response as fallback
-      this.sendCallResult(stationId, messageId, {
-        status: 'Accepted',
-        currentTime: new Date().toISOString(),
-        interval: 300
-      });
+      try {
+        const fallbackResponse = {
+          status: 'Accepted',
+          currentTime: new Date().toISOString(),
+          interval: 300
+        };
+        logger.info(`📤 Sending fallback BootNotification response: ${JSON.stringify(fallbackResponse)}`);
+        this.sendCallResult(stationId, messageId, fallbackResponse);
+      } catch (fallbackError) {
+        logger.error(`❌ Failed to send fallback BootNotification response:`, fallbackError);
+      }
     }
   }
 
@@ -342,10 +352,18 @@ export class OcppWebSocketServer {
   }
 
   sendCallResult(stationId, messageId, payload) {
-    logger.info(`sendCallResult: stationId=${stationId}, messageId=${messageId}, payload=${JSON.stringify(payload)}`);
-    const message = [OCPP.MESSAGE_TYPE.CALLRESULT, messageId, payload];
-    logger.info(`CALLRESULT message array: ${JSON.stringify(message)}`);
-    this.sendMessage(stationId, message);
+    logger.info(`🔵 sendCallResult START: stationId=${stationId}, messageId=${messageId}, payload=${JSON.stringify(payload)}`);
+    
+    try {
+      const message = [OCPP.MESSAGE_TYPE.CALLRESULT, messageId, payload];
+      logger.info(`📋 CALLRESULT message array: ${JSON.stringify(message)}`);
+      
+      this.sendMessage(stationId, message);
+      logger.info(`✅ sendCallResult completed successfully`);
+    } catch (error) {
+      logger.error(`❌ Error in sendCallResult:`, error);
+      throw error;
+    }
   }
 
   sendCallError(stationId, messageId, errorCode, errorDescription, errorDetails = {}) {
@@ -354,13 +372,25 @@ export class OcppWebSocketServer {
   }
 
   sendMessage(stationId, message) {
-    const ws = this.clients.get(stationId);
-    if (ws && ws.readyState === ws.OPEN) {
-      const data = JSON.stringify(message);
-      ws.send(data);
-      logger.info(`Sent to ${stationId}:`, message);
-    } else {
-      logger.warn(`Cannot send message to ${stationId}: Connection not available`);
+    logger.info(`🔵 sendMessage START: stationId=${stationId}, message=${JSON.stringify(message)}`);
+    
+    try {
+      const ws = this.clients.get(stationId);
+      logger.info(`🔍 WebSocket client lookup result: ${ws ? 'FOUND' : 'NOT FOUND'}`);
+      
+      if (ws && ws.readyState === ws.OPEN) {
+        const data = JSON.stringify(message);
+        logger.info(`📤 About to send data: ${data}`);
+        
+        ws.send(data);
+        logger.info(`✅ Message sent successfully to ${stationId}`);
+      } else {
+        const readyState = ws ? ws.readyState : 'N/A';
+        logger.warn(`❌ Cannot send message to ${stationId}: Connection not available (readyState: ${readyState})`);
+      }
+    } catch (error) {
+      logger.error(`❌ Error in sendMessage:`, error);
+      throw error;
     }
   }
 

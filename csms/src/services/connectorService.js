@@ -43,9 +43,9 @@ class ConnectorService {
       });
 
       // Store in Firebase if available
-      if (firebase.isInitialized()) {
-        await this.saveConnectorsToFirebase(stationId, connectors);
-      }
+      // if (firebase.isInitialized()) {
+      //   await this.saveConnectorsToFirebase(stationId, connectors);
+      // }
 
       logger.info(`✅ Initialized 2 persistent connectors for station ${stationId}`);
       return connectors;

@@ -10,7 +10,7 @@ const ConnectionPanel = ({
   const [formData, setFormData] = useState({
     stationId: '',
     ownerId: '',
-    connectorCount: 1,
+  connectorCount: 2,
     vendor: 'SIM',
     model: 'SIM-X',
     firmwareVersion: '1.0.0'
@@ -18,11 +18,13 @@ const ConnectionPanel = ({
 
   const [isConnecting, setIsConnecting] = useState(false);
 
+  // Chỉ cho phép nhập các trường khác, không cho chỉnh số connector
   const handleInputChange = (e) => {
-    const { name, value, type } = e.target;
+    const { name, value } = e.target;
+    if (name === 'connectorCount') return; // Không cho chỉnh
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'number' ? parseInt(value) || 1 : value
+      [name]: value
     }));
   };
 
@@ -96,18 +98,15 @@ const ConnectionPanel = ({
           </div>
         </div>
 
+        {/* Luôn cố định 2 connector, không cho chỉnh số lượng */}
         <div className="form-row">
           <div className="form-group">
-            <label htmlFor="connectorCount">Số Connector</label>
+            <label>Số Connector</label>
             <input
               type="number"
-              id="connectorCount"
-              name="connectorCount"
-              value={formData.connectorCount}
-              onChange={handleInputChange}
-              disabled={isConnected}
-              min="1"
-              max="10"
+              value={2}
+              disabled
+              style={{ background: '#eee', color: '#888', fontWeight: 'bold' }}
             />
           </div>
           

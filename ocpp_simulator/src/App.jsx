@@ -78,63 +78,42 @@ function App() {
   const handleConnect = async (config) => {
     try {
       setConnectionStatus('connecting');
-      
       // Connect to WebSocket
       await ocppClientRef.current.connect(config.stationId, config.ownerId);
-      
       // Send BootNotification
       const bootPayload = {
         chargePointVendor: config.vendor,
         chargePointModel: config.model,
         firmwareVersion: config.firmwareVersion
       };
-
       const bootResponse = await ocppClientRef.current.sendCall('BootNotification', bootPayload);
-      
       if (bootResponse.status === 'Accepted') {
         // Start heartbeat
         ocppClientRef.current.startHeartbeat(bootResponse.interval);
-        
         // Initialize connectors
         const newConnectors = [];
         const newMeterTimers = new Map();
-        
         for (let i = 1; i <= config.connectorCount; i++) {
           newConnectors.push({
             id: i,
             status: 'Available',
             transactionId: null,
             meterStart: 0,
-            errorCode: 'NoError'
+            errorCode: 'NoError',
           });
-
-          // Create meter timer for each connector
-          const timer = new MeterTimer(ocppClientRef.current, i);
-          newMeterTimers.set(i, timer);
+          newMeterTimers.set(i, new MeterTimer(i, ocppClientRef.current));
         }
-        
         setConnectors(newConnectors);
         setMeterTimers(newMeterTimers);
         setStationConfig(config);
-        
-        // Send StatusNotification for all connectors
-        for (let i = 1; i <= config.connectorCount; i++) {
-          await sendStatusNotification(i, 'Available');
-        }
-        
-        addLog({
-          type: 'log',
-          level: 'info',
-          message: `✅ Station ${config.stationId} connected successfully with ${config.connectorCount} connectors`,
-          timestamp: new Date().toISOString()
-        });
-        
-      } else {
-        throw new Error(`Boot rejected: ${bootResponse.status}`);
       }
-      
     } catch (error) {
-      setConnectionStatus('disconnected');
+      addLog({
+        type: 'log',
+        level: 'error',
+        message: `❌ Failed to connect: ${error.message}`,
+        timestamp: new Date().toISOString()
+      });
       throw error;
     }
   };
@@ -450,27 +429,37 @@ function App() {
         <div className="middle-panel">
           <div className="connectors-section">
             <h2>🔌 Connectors</h2>
-            {connectors.length === 0 ? (
-              <div className="no-connectors">
-                Chưa có connector nào. Vui lòng kết nối trạm.
-              </div>
-            ) : (
-              <div className="connectors-grid">
-                {connectors.map(connector => (
-                  <ConnectorCard
-                    key={connector.id}
-                    connectorId={connector.id}
-                    status={connector.status}
-                    transactionId={connector.transactionId}
-                    meterTimer={meterTimers.get(connector.id)}
-                    onLocalStart={handleLocalStart}
-                    onLocalStop={handleLocalStop}
-                    onStatusChange={handleStatusChange}
-                    isConnected={isConnected}
-                  />
-                ))}
-              </div>
-            )}
+            <div className="connectors-grid">
+              {isConnected && connectors.length === 2
+                ? connectors.map(connector => (
+                    <ConnectorCard
+                      key={connector.id}
+                      connectorId={connector.id}
+                      status={connector.status}
+                      transactionId={connector.transactionId}
+                      meterTimer={meterTimers.get(connector.id)}
+                      onLocalStart={handleLocalStart}
+                      onLocalStop={handleLocalStop}
+                      onStatusChange={handleStatusChange}
+                      isConnected={isConnected}
+                    />
+                  ))
+                : [1, 2].map(id => (
+                    <ConnectorCard
+                      key={id}
+                      connectorId={id}
+                      status="Chưa kết nối"
+                      transactionId={null}
+                      meterStart={0}
+                      errorCode="NoError"
+                      isConnected={false}
+                      onLocalStart={() => {}}
+                      onLocalStop={() => {}}
+                      onStatusChange={() => {}}
+                      disabled
+                    />
+                  ))}
+            </div>
           </div>
         </div>
 
