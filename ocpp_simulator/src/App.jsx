@@ -71,8 +71,10 @@ function App() {
     };
   }, []); // Empty dependency array is safe now
 
+  const MAX_LOG_ENTRIES = 500;
+
   const addLog = (logEntry) => {
-    setLogs(prev => [...prev, logEntry]);
+    setLogs(prev => [...prev, logEntry].slice(-MAX_LOG_ENTRIES));
   };
 
   const handleConnect = async (config) => {
@@ -106,6 +108,12 @@ function App() {
         setConnectors(newConnectors);
         setMeterTimers(newMeterTimers);
         setStationConfig(config);
+
+        // Gửi trạng thái ban đầu của các connector lên CSMS
+        // Đây là bước quan trọng để dữ liệu xuất hiện trên Firebase ngay khi kết nối
+        for (const connector of newConnectors) {
+          await sendStatusNotification(connector.id, connector.status);
+        }
       }
     } catch (error) {
       addLog({
@@ -179,10 +187,10 @@ function App() {
         throw new Error('Connector not available for start');
       }
 
-      // Send StatusNotification (Preparing)
+      // 1. Gửi StatusNotification (Preparing)
       await sendStatusNotification(connectorId, 'Preparing');
 
-      // Optional: Authorize
+      // 2. Tùy chọn: Authorize
       try {
         const authResponse = await ocppClientRef.current.sendCall('Authorize', {
           idTag: 'DEMO_USER'
@@ -200,7 +208,7 @@ function App() {
         });
       }
 
-      // Start transaction
+      // 3. Bắt đầu transaction
       const meterStart = Math.floor(Math.random() * 100000) + 10000; // Random starting meter value
       const startPayload = {
         connectorId,
@@ -211,15 +219,16 @@ function App() {
 
       const startResponse = await ocppClientRef.current.sendCall('StartTransaction', startPayload);
       
+      // 4. Nếu thành công...
       if (startResponse.transactionId) {
-        // Update connector state
+        // 4a. Cập nhật trạng thái connector với transactionId
         setConnectors(prev => prev.map(conn => 
           conn.id === connectorId 
             ? { ...conn, transactionId: startResponse.transactionId, meterStart }
             : conn
         ));
 
-        // Send StatusNotification (Charging)
+        // 4b. Gửi StatusNotification (Charging)
         await sendStatusNotification(connectorId, 'Charging');
 
         // Start meter timer
@@ -239,7 +248,7 @@ function App() {
       }
 
     } catch (error) {
-      // Revert to Available on error
+      // 5. Quay về trạng thái Available nếu có lỗi
       await sendStatusNotification(connectorId, 'Available');
       throw error;
     }

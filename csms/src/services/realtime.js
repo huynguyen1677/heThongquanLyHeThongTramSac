@@ -11,6 +11,7 @@ class RealtimeService {
   initialize() {
     if (firebase.isInitialized()) {
       this.db = firebase.getDatabase();
+      logger.info(`[RTDB] databaseURL = ${this.db.app?.options?.databaseURL}`);
       logger.info('Realtime Database service ready');
     } else {
       logger.warn('Realtime Database service not available - Firebase not initialized');
@@ -42,43 +43,29 @@ class RealtimeService {
   }
 
   async updateConnectorStatus(stationId, connectorId, statusData) {
-    if (!this.isAvailable()) return false;
+  if (!this.isAvailable()) return false;
 
-    try {
-      const connectorRef = this.db.ref(`stations/${stationId}/connectors/${connectorId}`);
-      const data = {
-        ...statusData,
-        lastUpdate: getTimestamp()
-      };
-      
-      await connectorRef.update(data);
-      logger.debug(`Connector status updated in Realtime DB: ${stationId}/${connectorId}`);
-      return true;
-    } catch (error) {
-      logger.error('Error updating connector status in Realtime DB:', error);
-      return false;
-    }
+  try {
+    const connectorRef = this.db.ref(`stations/${stationId}/connectors/${connectorId}`);
+    const data = { ...statusData, lastUpdate: getTimestamp() };
+
+    logger.info(`[RTDB] writing to: ${connectorRef.toString()}`);
+    await connectorRef.update(data);
+
+    // Đọc lại xác nhận
+    const snap = await connectorRef.once('value');
+    const val = snap.val();
+    logger.info(`[RTDB] readback: exists=${snap.exists()} value=${JSON.stringify(val)}`);
+
+    logger.info(`✅ Connector status updated in Realtime DB: ${stationId}/${connectorId}`);
+    return true;
+  } catch (error) {
+    logger.error('Error updating connector status in Realtime DB:', error);
+    return false;
   }
+}
 
-  // Transaction updates
-  async updateTransactionStatus(transactionId, statusData) {
-    if (!this.isAvailable()) return false;
 
-    try {
-      const transactionRef = this.db.ref(`transactions/${transactionId}`);
-      const data = {
-        ...statusData,
-        lastUpdate: getTimestamp()
-      };
-      
-      await transactionRef.update(data);
-      logger.debug(`Transaction status updated in Realtime DB: ${transactionId}`);
-      return true;
-    } catch (error) {
-      logger.error('Error updating transaction status in Realtime DB:', error);
-      return false;
-    }
-  }
 
   // Live meter values
   async updateMeterValues(stationId, connectorId, meterValues, transactionId = null) {

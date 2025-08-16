@@ -1,16 +1,33 @@
 export class MeterTimer {
+    /**
+   * Constructor của MeterTimer.
+   * @param {number} connectorId - ID của cổng sạc.
+   * @param {OcppClient} ocppClient - Đối tượng client để gửi tin nhắn OCPP.
+   */
+
   constructor(connectorId, ocppClient) {
     this.ocppClient = ocppClient;
     this.connectorId = connectorId;
-    this.timer = null;
-    this.isRunning = false;
-    this.interval = 5000; // 5 seconds default
+
+    this.timer = null; // Để lưu ID của setInterval
+    this.isRunning = false; // Cờ cho biết timer có đang chạy không
+    this.interval = 5000; // Mặc định gửi MeterValues mỗi 5 giây
+
+    // Các thông tin về phiên sạc hiện tại
     this.transactionId = null;
-    this.meterStart = 0;
-    this.currentMeterValue = 0;
-    this.powerKw = 3.5; // Default 3.5kW
-    this.startTime = null;
+    this.meterStart = 0; // Giá trị meter lúc bắt đầu
+    this.currentMeterValue = 0; // Giá trị meter hiện tại (tính bằng Wh)
+    this.powerKw = 3.5; // Công suất sạc mặc định (kW)
+    this.startTime = null; // Thời điểm bắt đầu sạc
   }
+
+  /**
+   * Bắt đầu bộ đếm thời gian cho một phiên sạc.
+   * @param {number} transactionId - ID của phiên giao dịch.
+   * @param {number} meterStart - Giá trị meter lúc bắt đầu (Wh).
+   * @param {number} powerKw - Công suất sạc (kW).
+   * @param {number} intervalSeconds - Chu kỳ gửi MeterValues (giây).
+   */
 
   // Start meter timer for a transaction
   start(transactionId, meterStart, powerKw = 3.5, intervalSeconds = 5) {
@@ -26,18 +43,20 @@ export class MeterTimer {
     this.startTime = new Date();
     this.isRunning = true;
 
-    this.log(`🔋 Starting meter timer for transaction ${transactionId}, power: ${powerKw}kW, interval: ${intervalSeconds}s`);
+    this.log(`🔋 Bắt đầu meter timer cho transaction ${transactionId}, công suất: ${powerKw}kW`);
 
-    // Send first meter value immediately
+    // Gửi giá trị meter đầu tiên ngay lập tức
     this.sendMeterValues();
 
-    // Schedule periodic meter values
+    // Lên lịch gửi định kỳ
     this.timer = setInterval(() => {
       this.sendMeterValues();
     }, this.interval);
   }
 
-  // Stop meter timer
+  /**
+   * Dừng bộ đếm thời gian.
+   */
   stop() {
     if (this.timer) {
       clearInterval(this.timer);
@@ -46,7 +65,73 @@ export class MeterTimer {
     this.isRunning = false;
     
     if (this.transactionId) {
-      this.log(`🔋 Stopped meter timer for transaction ${this.transactionId}`);
+      this.log(`🔋 Đã dừng meter timer cho transaction ${this.transactionId}`);
+    }
+  }
+
+    /**
+   * Lấy các thông số sạc hiện tại để hiển thị trên UI.
+   * @returns {object}
+   */
+  getChargingStats() {
+    const energyKwh = (this.currentMeterValue - this.meterStart) / 1000;
+    const pricePerKwh = 2380; // Giá điện giả định
+    const cost = energyKwh * pricePerKwh;
+
+    return {
+      transactionId: this.transactionId,
+      currentMeterValue: Math.round(this.currentMeterValue),
+      energyKwh: energyKwh,
+      powerKw: this.powerKw,
+      duration: this.getChargingDuration(),
+      estimatedCost: Math.round(cost / 100) * 100, // Làm tròn đến trăm đồng
+      isRunning: this.isRunning
+    };
+  }
+
+  /**
+   * Lấy thời gian sạc đã trôi qua.
+   * @returns {string} Chuỗi thời gian "HH:MM:SS".
+   */
+  getChargingDuration() {
+    if (!this.startTime) return '00:00:00';
+
+    const diffMs = new Date() - this.startTime;
+    const hours = Math.floor(diffMs / 3600000).toString().padStart(2, '0');
+    const minutes = Math.floor((diffMs % 3600000) / 60000).toString().padStart(2, '0');
+    const seconds = Math.floor((diffMs % 60000) / 1000).toString().padStart(2, '0');
+    return `${hours}:${minutes}:${seconds}`;
+  }
+
+  /**
+   * Lấy giá trị meter hiện tại.
+   * @returns {number}
+   */
+  getCurrentMeterValue() {
+    return Math.round(this.currentMeterValue);
+  }
+
+  /**
+   * Kiểm tra xem timer có đang chạy không.
+   * @returns {boolean}
+   */
+  isActive() {
+    return this.isRunning;
+  }
+
+  /**
+   * Ghi log ra console để debug.
+   * @param {string} message - Nội dung log.
+   * @param {'info' | 'error'} level - Cấp độ log.
+   */
+  log(message, level = 'info') {
+    const timestamp = new Date().toISOString();
+    const logMessage = `[Meter-${this.connectorId}] ${message}`;
+    
+    if (level === 'error') {
+      console.error(`[${timestamp}] ${logMessage}`);
+    } else {
+      console.log(`[${timestamp}] ${logMessage}`);
     }
   }
 
@@ -56,38 +141,39 @@ export class MeterTimer {
     this.log(`⚡ Power updated to ${powerKw}kW`);
   }
 
-  // Calculate and send meter values
+  /**
+   * Tính toán và gửi tin nhắn MeterValues.
+   */
   sendMeterValues() {
     if (!this.isRunning || !this.transactionId) {
       return;
     }
 
-    // Calculate energy increment since last reading
-    const deltaTimeHours = this.interval / (1000 * 3600); // Convert ms to hours
-    const deltaWh = this.powerKw * 1000 * deltaTimeHours; // Convert kW to W, then to Wh
-    
-    // Update total meter value (always increasing)
+    // 1. Tính toán lượng điện năng tiêu thụ trong chu kỳ vừa qua
+    const deltaTimeHours = this.interval / (1000 * 3600); // Đổi mili-giây sang giờ
+    const deltaWh = this.powerKw * 1000 * deltaTimeHours; // Đổi kW sang W, rồi tính Wh 
+
+    // 2. Cập nhật tổng giá trị meter
     this.currentMeterValue += deltaWh;
 
-    // Current power in Watts
-    const powerW = this.powerKw * 1000;
 
-    // Create MeterValues payload
-    const timestamp = new Date().toISOString();
+    // 3. Tạo payload theo chuẩn OCPP 1.6-J
     const payload = {
       connectorId: this.connectorId,
       transactionId: this.transactionId,
       meterValue: [
         {
-          timestamp,
+          timestamp: new Date().toISOString(),
           sampledValue: [
             {
+              // Tổng năng lượng đã sạc (luôn tăng)
               value: Math.round(this.currentMeterValue).toString(),
               measurand: 'Energy.Active.Import.Register',
               unit: 'Wh'
             },
             {
-              value: Math.round(powerW).toString(),
+              // Công suất sạc tức thời
+              value: Math.round(this.powerKw * 1000).toString(),
               measurand: 'Power.Active.Import',
               unit: 'W'
             }
@@ -96,22 +182,11 @@ export class MeterTimer {
       ]
     };
 
-    // Send meter values
+    // 4. Gửi tin nhắn đi bằng ocppClient
     this.ocppClient.sendCall('MeterValues', payload)
-      .then(() => {
-        // Log successful meter reading
-        const energyKwh = (this.currentMeterValue - this.meterStart) / 1000;
-        const duration = this.getChargingDuration();
-        this.log(`📊 Meter reading sent: ${Math.round(this.currentMeterValue)}Wh (+${Math.round(deltaWh)}Wh), ${this.powerKw}kW, ${duration}, ${energyKwh.toFixed(3)}kWh`);
-      })
       .catch((error) => {
-        this.log(`❌ Failed to send meter values: ${error.message}`, 'error');
+        this.log(`❌ Lỗi khi gửi meter values: ${error.message}`, 'error');
       });
-  }
-
-  // Get current meter value
-  getCurrentMeterValue() {
-    return Math.round(this.currentMeterValue);
   }
 
   // Get energy consumed in kWh
@@ -119,20 +194,6 @@ export class MeterTimer {
     return (this.currentMeterValue - this.meterStart) / 1000;
   }
 
-  // Get charging duration string
-  getChargingDuration() {
-    if (!this.startTime) {
-      return '00:00:00';
-    }
-
-    const now = new Date();
-    const diffMs = now - this.startTime;
-    const hours = Math.floor(diffMs / (1000 * 60 * 60));
-    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
-
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-  }
 
   // Calculate estimated cost (flat rate)
   getEstimatedCost() {
@@ -144,41 +205,6 @@ export class MeterTimer {
     return Math.round(cost / 100) * 100;
   }
 
-  // Get real-time charging stats
-  getChargingStats() {
-    return {
-      transactionId: this.transactionId,
-      meterStart: this.meterStart,
-      currentMeterValue: this.getCurrentMeterValue(),
-      energyKwh: this.getEnergyConsumed(),
-      powerKw: this.powerKw,
-      duration: this.getChargingDuration(),
-      estimatedCost: this.getEstimatedCost(),
-      isRunning: this.isRunning
-    };
-  }
-
-  // Logging helper
-  log(message, level = 'info') {
-    const timestamp = new Date().toISOString();
-    const logMessage = `[Meter-${this.connectorId}] ${message}`;
-    
-    switch (level) {
-      case 'error':
-        console.error(`[${timestamp}] ${logMessage}`);
-        break;
-      case 'warn':
-        console.warn(`[${timestamp}] ${logMessage}`);
-        break;
-      default:
-        console.log(`[${timestamp}] ${logMessage}`);
-    }
-  }
-
-  // Check if timer is running
-  isActive() {
-    return this.isRunning;
-  }
 
   // Get transaction ID
   getTransactionId() {

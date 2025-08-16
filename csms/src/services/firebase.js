@@ -33,7 +33,8 @@ class FirebaseService {
       this.app = initializeApp({
         credential: cert(serviceAccount),
         projectId: projectId,
-        databaseURL: `https://${projectId}-default-rtdb.asia-southeast1.firebasedatabase.app/`
+        // Dán trực tiếp URL từ Firebase Console vào đây để chắc chắn
+        databaseURL: "https://hethongquanlytramsacxe-default-rtdb.asia-southeast1.firebasedatabase.app/"
       });
 
       this.firestore = getFirestore(this.app);

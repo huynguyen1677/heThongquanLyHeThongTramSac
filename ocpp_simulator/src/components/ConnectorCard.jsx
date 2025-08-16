@@ -1,6 +1,16 @@
 import { useState, useEffect } from 'react';
 import './ConnectorCard.css';
 
+const INITIAL_STATS = {
+  transactionId: null,
+  currentMeterValue: 0,
+  energyKwh: 0,
+  powerKw: 0,
+  duration: '00:00:00',
+  estimatedCost: 0,
+  isRunning: false
+};
+
 const ConnectorCard = ({
   connectorId,
   status,
@@ -19,27 +29,30 @@ const ConnectorCard = ({
   });
   
   const [powerKw, setPowerKw] = useState(3.5);
-  const [stats, setStats] = useState({
-    transactionId: null,
-    meterStart: 0,
-    currentMeterValue: 0,
-    energyKwh: 0,
-    powerKw: 0,
-    duration: '00:00:00',
-    estimatedCost: 0,
-    isRunning: false
-  });
+  const [stats, setStats] = useState(INITIAL_STATS);
 
   // Update stats from meter timer
   useEffect(() => {
-    if (meterTimer && meterTimer.isActive()) {
-      const interval = setInterval(() => {
-        setStats(meterTimer.getChargingStats());
-      }, 1000); // Update every second
+    let interval = null;
 
-      return () => clearInterval(interval);
+    // Chỉ chạy interval khi đang ở trạng thái 'Charging'
+    if (status === 'Charging' && meterTimer?.isActive()) {
+      // Cập nhật trạng thái mỗi giây
+      interval = setInterval(() => {
+        setStats(meterTimer.getChargingStats());
+      }, 1000);
+    } else {
+      // Nếu không sạc, reset lại các thông số
+      setStats(INITIAL_STATS);
     }
-  }, [meterTimer]);
+
+    // Hàm dọn dẹp: sẽ được gọi khi component unmount hoặc khi các dependency thay đổi
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [status, meterTimer]); // Thêm `status` vào dependency array
 
   const handlePreCheckChange = (field, value) => {
     setPreCheck(prev => ({

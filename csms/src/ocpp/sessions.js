@@ -1,5 +1,6 @@
 import { logger } from '../utils/logger.js';
 import { getTimestamp } from '../utils/time.js';
+import { realtimeService } from '../services/realtime.js';
 import { CONNECTOR_STATUS, TRANSACTION_STATUS } from '../domain/constants.js';
 
 class SessionManager {
@@ -28,6 +29,12 @@ class SessionManager {
     };
 
     this.stations.set(stationId, station);
+    // Ghi trạng thái ban đầu của trạm sạc lên Firebase
+    realtimeService.updateStationStatus(stationId, {
+      stationId: stationId,
+      status: 'Online',
+      bootTime: station.bootTime
+    });
     logger.info(`Station session created: ${stationId}`);
     
     return station;
@@ -41,7 +48,7 @@ class SessionManager {
     const stations = [];
     for (const [stationId, station] of this.stations) {
       stations.push({
-        id: stationId,
+        stationId: stationId,
         status: station.status,
         info: station.info,
         lastSeen: station.lastSeen,
@@ -58,6 +65,10 @@ class SessionManager {
     if (station) {
       station.info = { ...station.info, ...info };
       logger.debug(`Station info updated: ${stationId}`, station.info);
+      // Cập nhật thông tin trạm sạc (vendor, model) lên Firebase
+      realtimeService.updateStationStatus(stationId, {
+        info: station.info
+      });
     }
   }
 
@@ -72,13 +83,14 @@ class SessionManager {
     const station = this.stations.get(stationId);
     if (station) {
       station.status = status;
+      // Cập nhật trạng thái Online/Offline của trạm sạc lên Firebase
+      realtimeService.updateStationStatus(stationId, { status: status, lastSeen: getTimestamp() });
       logger.info(`Station ${stationId} status: ${status}`);
       
       // If going offline, mark all connectors as unavailable
       if (status === 'Offline') {
         for (const [connectorId, connector] of station.connectors) {
-          connector.status = CONNECTOR_STATUS.UNAVAILABLE;
-          connector.lastStatusUpdate = getTimestamp();
+          this.updateConnectorStatus(stationId, connectorId, { status: CONNECTOR_STATUS.UNAVAILABLE });
         }
       }
     }
@@ -163,6 +175,7 @@ class SessionManager {
     connector.info = statusData.info;
 
     logger.info(`Connector ${stationId}/${connectorId} status: ${statusData.status}`);
+    realtimeService.updateConnectorStatus(stationId, connectorId, { status: statusData.status });
   }
 
   getStationConnectors(stationId) {
@@ -340,6 +353,7 @@ class SessionManager {
         }
       }
     }
+    realtimeService.updateMeterValues(stationId, connectorId, meterValues, transactionId);
 
     logger.debug(`Meter values added: ${stationId}/${connectorId}, count: ${meterValues.length}`);
   }

@@ -31,8 +31,8 @@ class CSMSServer {
         await firebase.initialize();
         
         if (firebase.isInitialized()) {
-          await firestoreService.initialize(firebase.getFirestore());
-          await realtimeService.initialize(firebase.getDatabase());
+          firestoreService.initialize();
+          realtimeService.initialize();
           logger.info('🔥 Firebase services initialized successfully');
         } else {
           logger.warn('⚠️  Firebase services not available - running in standalone mode');
