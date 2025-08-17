@@ -101,6 +101,7 @@ function App() {
             status: 'Available',
             transactionId: null,
             meterStart: 0,
+            cumulativeMeter: 0, // Bắt đầu từ 0 cho máy mới
             errorCode: 'NoError',
           });
           newMeterTimers.set(i, new MeterTimer(i, ocppClientRef.current));
@@ -209,7 +210,10 @@ function App() {
       }
 
       // 3. Bắt đầu transaction
-      const meterStart = Math.floor(Math.random() * 100000) + 10000; // Random starting meter value
+      // Lấy meterStart từ connector hiện tại (tích lũy từ các session trước)
+      const currentConnector = connectors.find(c => c.id === connectorId);
+      const meterStart = currentConnector?.cumulativeMeter || 0; // Sử dụng giá trị tích lũy thay vì random
+      
       const startPayload = {
         connectorId,
         idTag: 'DEMO_USER',
@@ -292,10 +296,15 @@ function App() {
       setTimeout(async () => {
         await sendStatusNotification(connectorId, 'Available');
         
-        // Clear transaction
+        // Lưu cumulativeMeter và clear transaction
         setConnectors(prev => prev.map(conn => 
           conn.id === connectorId 
-            ? { ...conn, transactionId: null, meterStart: 0 }
+            ? { 
+                ...conn, 
+                transactionId: null, 
+                meterStart: 0,
+                cumulativeMeter: meterStop // Lưu giá trị meter cuối để dùng cho session tiếp theo
+              }
             : conn
         ));
       }, 2000);

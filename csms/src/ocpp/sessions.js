@@ -10,16 +10,18 @@ class SessionManager {
   }
 
   // Station management
-  createStation(stationId, websocket) {
+  createStation(stationId, websocket, stationInfo = {}) {
     const station = {
       id: stationId,
       websocket,
       status: 'Online',
       info: {
-        vendor: null,
-        model: null,
-        firmware: null,
-        serialNumber: null
+        vendor: stationInfo.vendor || null,
+        model: stationInfo.model || null,
+        firmware: stationInfo.firmwareVersion || null,
+        serialNumber: stationInfo.serialNumber || null,
+        ownerId: stationInfo.ownerId || null,
+        stationName: stationInfo.stationName || null
       },
       connectors: new Map(), // connectorId -> ConnectorSession
       lastSeen: getTimestamp(),
@@ -29,14 +31,17 @@ class SessionManager {
     };
 
     this.stations.set(stationId, station);
-    // Ghi trạng thái ban đầu của trạm sạc lên Firebase
-    realtimeService.updateStationStatus(stationId, {
-      stationId: stationId,
-      status: 'Online',
-      bootTime: station.bootTime
-    });
-    logger.info(`Station session created: ${stationId}`);
     
+    // Cập nhật theo cấu trúc mới của realtime
+    realtimeService.updateStationOnline(stationId, true, {
+      ownerId: station.info.ownerId,
+      stationName: station.info.stationName,
+      vendor: station.info.vendor,
+      model: station.info.model,
+      firmwareVersion: station.info.firmware
+    });
+    
+    logger.info(`Station session created: ${stationId}`);
     return station;
   }
 
@@ -65,9 +70,14 @@ class SessionManager {
     if (station) {
       station.info = { ...station.info, ...info };
       logger.debug(`Station info updated: ${stationId}`, station.info);
-      // Cập nhật thông tin trạm sạc (vendor, model) lên Firebase
-      realtimeService.updateStationStatus(stationId, {
-        info: station.info
+      
+      // Cập nhật thông tin trạm sạc theo cấu trúc mới
+      realtimeService.updateStationInfo(stationId, {
+        ownerId: station.info.ownerId,
+        stationName: station.info.stationName,
+        vendor: station.info.vendor,
+        model: station.info.model,
+        firmwareVersion: station.info.firmware
       });
     }
   }
@@ -76,6 +86,8 @@ class SessionManager {
     const station = this.stations.get(stationId);
     if (station) {
       station.lastSeen = getTimestamp();
+      // Cập nhật heartbeat
+      realtimeService.updateStationHeartbeat(stationId);
     }
   }
 
@@ -83,14 +95,27 @@ class SessionManager {
     const station = this.stations.get(stationId);
     if (station) {
       station.status = status;
-      // Cập nhật trạng thái Online/Offline của trạm sạc lên Firebase
-      realtimeService.updateStationStatus(stationId, { status: status, lastSeen: getTimestamp() });
+      station.lastSeen = getTimestamp();
+      
+      // Cập nhật trạng thái Online/Offline theo cấu trúc mới
+      const isOnline = status === 'Online';
+      realtimeService.updateStationOnline(stationId, isOnline, {
+        ownerId: station.info.ownerId,
+        stationName: station.info.stationName,
+        vendor: station.info.vendor,
+        model: station.info.model,
+        firmwareVersion: station.info.firmware
+      });
+      
       logger.info(`Station ${stationId} status: ${status}`);
       
       // If going offline, mark all connectors as unavailable
       if (status === 'Offline') {
         for (const [connectorId, connector] of station.connectors) {
-          this.updateConnectorStatus(stationId, connectorId, { status: CONNECTOR_STATUS.UNAVAILABLE });
+          this.updateConnectorStatus(stationId, connectorId, { 
+            status: CONNECTOR_STATUS.UNAVAILABLE,
+            errorCode: 'NoError'
+          });
         }
       }
     }
@@ -103,6 +128,9 @@ class SessionManager {
       for (const transactionId of station.transactions) {
         this.forceStopTransaction(transactionId, 'StationDisconnected');
       }
+      
+      // Remove từ live data
+      realtimeService.removeStationFromLive(stationId);
       
       this.stations.delete(stationId);
       logger.info(`Station session removed: ${stationId}`);
@@ -175,7 +203,15 @@ class SessionManager {
     connector.info = statusData.info;
 
     logger.info(`Connector ${stationId}/${connectorId} status: ${statusData.status}`);
-    realtimeService.updateConnectorStatus(stationId, connectorId, { status: statusData.status });
+    
+    // Cập nhật theo cấu trúc mới
+    realtimeService.updateConnectorStatus(stationId, connectorId, {
+      status: statusData.status,
+      errorCode: connector.errorCode,
+      txId: connector.currentTransaction,
+      Wh_total: statusData.Wh_total,
+      W_now: statusData.W_now
+    });
   }
 
   getStationConnectors(stationId) {
@@ -237,6 +273,14 @@ class SessionManager {
     connector.currentTransaction = transaction.id;
     connector.status = CONNECTOR_STATUS.CHARGING;
 
+    // Cập nhật transaction ID trong realtime
+    realtimeService.updateConnectorTransaction(stationId, connectorId, transaction.id);
+    realtimeService.updateConnectorStatus(stationId, connectorId, {
+      status: CONNECTOR_STATUS.CHARGING,
+      errorCode: 'NoError',
+      txId: transaction.id
+    });
+
     logger.info(`Transaction started: ${transaction.id} on ${stationId}/${connectorId}`);
     return transaction;
   }
@@ -272,6 +316,15 @@ class SessionManager {
     station.transactions.delete(transactionId);
     connector.currentTransaction = null;
     connector.status = CONNECTOR_STATUS.AVAILABLE;
+
+    // Cập nhật realtime - clear transaction và status
+    realtimeService.updateConnectorStatus(stationId, transaction.connectorId, {
+      status: CONNECTOR_STATUS.AVAILABLE,
+      errorCode: 'NoError',
+      txId: null,
+      Wh_total: transaction.meterStop,
+      W_now: 0
+    });
 
     logger.info(`Transaction stopped: ${transactionId} on ${stationId}/${transaction.connectorId}`);
     return transaction;
@@ -334,6 +387,31 @@ class SessionManager {
       connector.meterValues = connector.meterValues.slice(-100);
     }
 
+    // Extract energy and power values từ meter values
+    let Wh_total = 0;
+    let W_now = 0;
+
+    if (meterValues.length > 0) {
+      const latestValue = meterValues[meterValues.length - 1];
+      if (latestValue && latestValue.sampledValue) {
+        // Tìm giá trị năng lượng
+        const energyValue = latestValue.sampledValue.find(
+          sv => sv.measurand === 'Energy.Active.Import.Register'
+        );
+        if (energyValue) {
+          Wh_total = parseFloat(energyValue.value) || 0;
+        }
+
+        // Tìm giá trị công suất
+        const powerValue = latestValue.sampledValue.find(
+          sv => sv.measurand === 'Power.Active.Import'
+        );
+        if (powerValue) {
+          W_now = parseFloat(powerValue.value) || 0;
+        }
+      }
+    }
+
     // Add to transaction if specified
     if (transactionId) {
       const transaction = this.transactions.get(transactionId);
@@ -341,21 +419,18 @@ class SessionManager {
         transaction.meterValues.push(...meterValues);
         
         // Update energy consumed from latest meter value
-        const latestValue = meterValues[meterValues.length - 1];
-        if (latestValue && latestValue.sampledValue) {
-          const energyValue = latestValue.sampledValue.find(
-            sv => sv.measurand === 'Energy.Active.Import.Register'
-          );
-          if (energyValue) {
-            const currentMeter = parseFloat(energyValue.value);
-            transaction.energyConsumed = currentMeter - transaction.meterStart;
-          }
+        if (Wh_total > 0) {
+          transaction.energyConsumed = Wh_total - transaction.meterStart;
         }
       }
     }
-    realtimeService.updateMeterValues(stationId, connectorId, meterValues, transactionId);
 
-    logger.debug(`Meter values added: ${stationId}/${connectorId}, count: ${meterValues.length}`);
+    // Cập nhật meter values lên realtime - truyền currentWhReading để tính toán đúng
+    realtimeService.updateConnectorMeterValues(stationId, connectorId, {
+      currentWhReading: Wh_total,  // Đây là giá trị đồng hồ hiện tại từ OCPP
+      W_now
+    });
+
   }
 
   // Reservations

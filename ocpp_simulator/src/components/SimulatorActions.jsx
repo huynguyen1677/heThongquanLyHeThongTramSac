@@ -5,7 +5,9 @@ const SimulatorActions = ({
   onRunPreset, 
   onExportLogs, 
   isConnected,
-  logs 
+  logs,
+  connectors,
+  onSetCumulativeMeter // Thêm prop mới
 }) => {
   const [isRunningPreset, setIsRunningPreset] = useState(false);
   const [autoMeterEnabled, setAutoMeterEnabled] = useState(true);
@@ -128,6 +130,42 @@ const SimulatorActions = ({
           >
             📥 Xuất Logs (.json)
           </button>
+        </div>
+
+        {/* Meter Management */}
+        <div className="action-section">
+          <h3>🔋 Quản lý Cumulative Meter</h3>
+          <div className="meter-controls">
+            <p>Simulate máy mới vs máy đang hoạt động:</p>
+            <div className="meter-buttons">
+              <button
+                className="btn btn-secondary"
+                onClick={() => onSetCumulativeMeter('reset')}
+                disabled={!isConnected}
+                title="Reset tất cả connector về 0 Wh (máy mới)"
+              >
+                🆕 Máy mới (0 Wh)
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => onSetCumulativeMeter('existing')}
+                disabled={!isConnected}
+                title="Set cumulative meter lớn (máy đang hoạt động)"
+              >
+                ⚡ Máy hoạt động (25k Wh)
+              </button>
+            </div>
+            {connectors && connectors.length > 0 && (
+              <div className="current-meters">
+                <small>Cumulative meter hiện tại:</small>
+                {connectors.map(conn => (
+                  <div key={conn.id} className="meter-display">
+                    <span>Connector {conn.id}: {(conn.cumulativeMeter || 0).toLocaleString()} Wh</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Connection Info */}

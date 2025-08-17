@@ -175,6 +175,51 @@ input:checked + .slider:before {
   word-break: break-all;
 }
 
+/* Meter Management Styles */
+.meter-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.meter-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.current-meters {
+  background: white;
+  border-radius: 6px;
+  padding: 12px;
+  border: 1px solid #dee2e6;
+}
+
+.current-meters small {
+  display: block;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.meter-display {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 13px;
+}
+
+.meter-display:last-child {
+  border-bottom: none;
+}
+
+.meter-display span {
+  font-family: monospace;
+  color: #333;
+}
+
 .tips-section {
   background: #e3f2fd;
   border-radius: 8px;
@@ -242,6 +287,57 @@ input:checked + .slider:before {
   background: #5a6268;
 }
 
+/* Meter Management Styles */
+.meter-controls {
+  background: white;
+  border-radius: 6px;
+  padding: 15px;
+  border: 1px solid #dee2e6;
+}
+
+.meter-controls p {
+  margin: 0 0 12px 0;
+  font-weight: 600;
+  color: #555;
+}
+
+.meter-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.current-meters {
+  border-top: 1px solid #dee2e6;
+  padding-top: 15px;
+  margin-top: 15px;
+}
+
+.current-meters small {
+  display: block;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.meter-display {
+  background: #f8f9fa;
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+  border: 1px solid #e9ecef;
+}
+
+.meter-display span {
+  font-family: monospace;
+  font-size: 13px;
+  color: #495057;
+  font-weight: 600;
+}
+
 @media (max-width: 768px) {
   .actions-grid {
     grid-template-columns: 1fr;
@@ -271,5 +367,18 @@ input:checked + .slider:before {
   
   .url {
     font-size: 10px;
+  }
+  
+  .meter-buttons {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  
+  .meter-display {
+    padding: 6px 10px;
+  }
+  
+  .meter-display span {
+    font-size: 12px;
   }
 }

@@ -78,11 +78,29 @@ export class MeterTimer {
     const pricePerKwh = 2380; // Giá điện giả định
     const cost = energyKwh * pricePerKwh;
 
+    // Tính công suất hiện tại theo cùng logic như sendMeterValues
+    let currentPowerKw = this.powerKw;
+    if (this.startTime) {
+      const chargingTimeMinutes = (new Date() - this.startTime) / (1000 * 60);
+      
+      if (chargingTimeMinutes < 5) {
+        currentPowerKw = this.powerKw * (chargingTimeMinutes / 5);
+      } else if (chargingTimeMinutes > 30) {
+        const fadeStart = 30;
+        const fadeMinutes = chargingTimeMinutes - fadeStart;
+        const fadeFactor = Math.max(0.3, 1 - (fadeMinutes / 60));
+        currentPowerKw = this.powerKw * fadeFactor;
+      }
+      
+      const variation = 0.9 + (Math.random() * 0.2);
+      currentPowerKw = Math.max(0, currentPowerKw * variation);
+    }
+
     return {
       transactionId: this.transactionId,
       currentMeterValue: Math.round(this.currentMeterValue),
       energyKwh: energyKwh,
-      powerKw: this.powerKw,
+      powerKw: Math.round(currentPowerKw * 100) / 100, // Công suất thực tế hiện tại
       duration: this.getChargingDuration(),
       estimatedCost: Math.round(cost / 100) * 100, // Làm tròn đến trăm đồng
       isRunning: this.isRunning
@@ -149,15 +167,37 @@ export class MeterTimer {
       return;
     }
 
-    // 1. Tính toán lượng điện năng tiêu thụ trong chu kỳ vừa qua
-    const deltaTimeHours = this.interval / (1000 * 3600); // Đổi mili-giây sang giờ
-    const deltaWh = this.powerKw * 1000 * deltaTimeHours; // Đổi kW sang W, rồi tính Wh 
+    // 1. Mô phỏng công suất thay đổi theo thời gian (realistic charging pattern)
+    const chargingTimeMinutes = (new Date() - this.startTime) / (1000 * 60);
+    let currentPowerKw = this.powerKw;
+    
+    // Mô phỏng quá trình sạc thực tế:
+    if (chargingTimeMinutes < 5) {
+      // 5 phút đầu: ramp up từ 0 đến power đầy
+      currentPowerKw = this.powerKw * (chargingTimeMinutes / 5);
+    } else if (chargingTimeMinutes > 30) {
+      // Sau 30 phút: giảm dần (battery gần đầy)
+      const fadeStart = 30;
+      const fadeMinutes = chargingTimeMinutes - fadeStart;
+      const fadeFactor = Math.max(0.3, 1 - (fadeMinutes / 60)); // Giảm dần, tối thiểu 30%
+      currentPowerKw = this.powerKw * fadeFactor;
+    }
+    
+    // Thêm một chút biến động ngẫu nhiên ±10%
+    const variation = 0.9 + (Math.random() * 0.2); // 0.9 to 1.1
+    currentPowerKw = currentPowerKw * variation;
+    
+    // Đảm bảo không âm và làm tròn
+    currentPowerKw = Math.max(0, currentPowerKw);
 
-    // 2. Cập nhật tổng giá trị meter
+    // 2. Tính toán lượng điện năng tiêu thụ trong chu kỳ vừa qua
+    const deltaTimeHours = this.interval / (1000 * 3600); // Đổi mili-giây sang giờ
+    const deltaWh = currentPowerKw * 1000 * deltaTimeHours; // Đổi kW sang W, rồi tính Wh 
+
+    // 3. Cập nhật tổng giá trị meter
     this.currentMeterValue += deltaWh;
 
-
-    // 3. Tạo payload theo chuẩn OCPP 1.6-J
+    // 4. Tạo payload theo chuẩn OCPP 1.6-J
     const payload = {
       connectorId: this.connectorId,
       transactionId: this.transactionId,
@@ -172,8 +212,8 @@ export class MeterTimer {
               unit: 'Wh'
             },
             {
-              // Công suất sạc tức thời
-              value: Math.round(this.powerKw * 1000).toString(),
+              // Công suất sạc tức thời (thay đổi theo thời gian)
+              value: Math.round(currentPowerKw * 1000).toString(),
               measurand: 'Power.Active.Import',
               unit: 'W'
             }
@@ -182,7 +222,7 @@ export class MeterTimer {
       ]
     };
 
-    // 4. Gửi tin nhắn đi bằng ocppClient
+    // 5. Gửi tin nhắn đi bằng ocppClient
     this.ocppClient.sendCall('MeterValues', payload)
       .catch((error) => {
         this.log(`❌ Lỗi khi gửi meter values: ${error.message}`, 'error');

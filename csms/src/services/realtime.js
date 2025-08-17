@@ -1,11 +1,15 @@
 import { firebase } from './firebase.js';
 import { logger } from '../utils/logger.js';
 import { getTimestamp } from '../utils/time.js';
+import { DEFAULT_PRICE_PER_KWH } from '../domain/constants.js';
 
 class RealtimeService {
   constructor() {
     this.db = null;
     this.listeners = new Map(); // path -> callback
+    this.pricePerKwh = DEFAULT_PRICE_PER_KWH; // VND per kWh
+    // Cache để lưu giá trị Wh bắt đầu của mỗi transaction
+    this.transactionStartValues = new Map(); // `${stationId}-${connectorId}-${txId}` -> startWh
   }
 
   initialize() {
@@ -22,97 +26,409 @@ class RealtimeService {
     return this.db !== null;
   }
 
-  // Station status updates
-  async updateStationStatus(stationId, statusData) {
+  // Station management - theo cấu trúc mới /live/stations/{stationId}/
+  async updateStationOnline(stationId, isOnline, stationInfo = {}) {
     if (!this.isAvailable()) return false;
 
     try {
-      const stationRef = this.db.ref(`stations/${stationId}`);
+      const stationRef = this.db.ref(`live/stations/${stationId}`);
       const data = {
-        ...statusData,
-        lastUpdate: getTimestamp()
+        online: isOnline,
+        lastHeartbeat: getTimestamp(),
+        ownerId: stationInfo.ownerId || null,
+        stationName: stationInfo.stationName || null,
+        vendor: stationInfo.vendor || null,
+        model: stationInfo.model || null,
+        firmwareVersion: stationInfo.firmwareVersion || null
       };
       
       await stationRef.update(data);
-      logger.debug(`Station status updated in Realtime DB: ${stationId}`);
+      logger.info(`Station ${stationId} online status updated: ${isOnline}`);
       return true;
     } catch (error) {
-      logger.error('Error updating station status in Realtime DB:', error);
+      logger.error('Error updating station online status:', error);
       return false;
     }
   }
 
+  // Cập nhật heartbeat của station
+  async updateStationHeartbeat(stationId) {
+    if (!this.isAvailable()) return false;
+
+    try {
+      const heartbeatRef = this.db.ref(`live/stations/${stationId}/lastHeartbeat`);
+      await heartbeatRef.set(getTimestamp());
+      logger.debug(`Station ${stationId} heartbeat updated`);
+      return true;
+    } catch (error) {
+      logger.error('Error updating station heartbeat:', error);
+      return false;
+    }
+  }
+
+  // Cập nhật thông tin station (vendor, model, firmware, v.v.)
+  async updateStationInfo(stationId, stationInfo) {
+    if (!this.isAvailable()) return false;
+
+    try {
+      const stationRef = this.db.ref(`live/stations/${stationId}`);
+      const updateData = {};
+      
+      if (stationInfo.ownerId !== undefined) updateData.ownerId = stationInfo.ownerId;
+      if (stationInfo.stationName !== undefined) updateData.stationName = stationInfo.stationName;
+      if (stationInfo.vendor !== undefined) updateData.vendor = stationInfo.vendor;
+      if (stationInfo.model !== undefined) updateData.model = stationInfo.model;
+      if (stationInfo.firmwareVersion !== undefined) updateData.firmwareVersion = stationInfo.firmwareVersion;
+      
+      await stationRef.update(updateData);
+      logger.debug(`Station ${stationId} info updated:`, updateData);
+      return true;
+    } catch (error) {
+      logger.error('Error updating station info:', error);
+      return false;
+    }
+  }
+
+  // Bắt đầu transaction - lưu giá trị Wh ban đầu
+  async startTransaction(stationId, connectorId, transactionId, initialWhValue = 0) {
+    if (!this.isAvailable()) return false;
+
+    try {
+      const transactionKey = `${stationId}-${connectorId}-${transactionId}`;
+      
+      // Lưu vào cache
+      this.transactionStartValues.set(transactionKey, initialWhValue);
+      
+      // Cập nhật connector với transaction mới và reset Wh_total về 0
+      const connectorRef = this.db.ref(`live/stations/${stationId}/connectors/${connectorId}`);
+      await connectorRef.update({
+        txId: transactionId,                              // number|null
+        Wh_total: 0,                                      // tổng Wh lũy kế trong phiên hoặc theo đồng hồ trạm (>=0) - reset về 0 cho phiên mới
+        W_now: 0,                                         // công suất hiện tại (W)
+        kwh: 0,                                           // Wh_total quy đổi kWh (dùng cho UI)
+        costEstimate: 0,                                  // kWh*price, làm tròn, để UI hiện tức thời
+        lastUpdate: getTimestamp()                        // epoch millis (server time)
+      });
+      
+      logger.info(`Transaction started: ${stationId}/${connectorId} -> ${transactionId}, startWh: ${initialWhValue}`);
+      return true;
+    } catch (error) {
+      logger.error('Error starting transaction:', error);
+      return false;
+    }
+  }
+
+  // Kết thúc transaction - cleanup
+  async stopTransaction(stationId, connectorId, transactionId) {
+    if (!this.isAvailable()) return false;
+
+    try {
+      const transactionKey = `${stationId}-${connectorId}-${transactionId}`;
+      
+      // Xóa từ cache
+      this.transactionStartValues.delete(transactionKey);
+      
+      // Cập nhật connector - giữ lại Wh_total cuối cùng nhưng clear txId
+      const connectorRef = this.db.ref(`live/stations/${stationId}/connectors/${connectorId}`);
+      await connectorRef.update({
+        txId: null,                                       // number|null - clear transaction ID
+        W_now: 0,                                         // công suất hiện tại (W) - reset về 0
+        lastUpdate: getTimestamp()                        // epoch millis (server time)
+        // Giữ lại Wh_total, kwh, costEstimate để hiển thị kết quả cuối
+      });
+      
+      logger.info(`Transaction stopped: ${stationId}/${connectorId} -> ${transactionId}`);
+      return true;
+    } catch (error) {
+      logger.error('Error stopping transaction:', error);
+      return false;
+    }
+  }
+
+  // Connector status updates - theo cấu trúc /live/stations/{stationId}/connectors/{connectorId}/
   async updateConnectorStatus(stationId, connectorId, statusData) {
-  if (!this.isAvailable()) return false;
-
-  try {
-    const connectorRef = this.db.ref(`stations/${stationId}/connectors/${connectorId}`);
-    const data = { ...statusData, lastUpdate: getTimestamp() };
-
-    logger.info(`[RTDB] writing to: ${connectorRef.toString()}`);
-    await connectorRef.update(data);
-
-    // Đọc lại xác nhận
-    const snap = await connectorRef.once('value');
-    const val = snap.val();
-    logger.info(`[RTDB] readback: exists=${snap.exists()} value=${JSON.stringify(val)}`);
-
-    logger.info(`✅ Connector status updated in Realtime DB: ${stationId}/${connectorId}`);
-    return true;
-  } catch (error) {
-    logger.error('Error updating connector status in Realtime DB:', error);
-    return false;
-  }
-}
-
-
-
-  // Live meter values
-  async updateMeterValues(stationId, connectorId, meterValues, transactionId = null) {
     if (!this.isAvailable()) return false;
 
     try {
-      const path = `meterValues/${stationId}/${connectorId}`;
-      const meterRef = this.db.ref(path);
-      
-      // Keep only the latest meter values (last 10)
+      const connectorRef = this.db.ref(`live/stations/${stationId}/connectors/${connectorId}`);
       const data = {
-        current: meterValues[meterValues.length - 1] || null,
-        history: meterValues.slice(-10),
-        transactionId,
-        lastUpdate: getTimestamp()
+        status: statusData.status,                        // "Available"|"Preparing"|"Charging"|"Finishing"|"Unavailable"|"Faulted"
+        errorCode: statusData.errorCode || 'NoError',     // "NoError" | ...
+        lastUpdate: getTimestamp()                        // epoch millis (server time)
       };
-      
-      await meterRef.set(data);
-      logger.debug(`Meter values updated in Realtime DB: ${stationId}/${connectorId}`);
+
+      // Cập nhật txId (transaction ID) - null hoặc number
+      if (statusData.txId !== undefined) {
+        data.txId = statusData.txId;
+      }
+
+      // Xử lý dữ liệu năng lượng chính xác
+      if (statusData.currentWhReading !== undefined && statusData.txId) {
+        const calculatedWhTotal = await this.calculateWhTotal(stationId, connectorId, statusData.txId, statusData.currentWhReading);
+        
+        data.Wh_total = calculatedWhTotal;                // tổng Wh lũy kế trong phiên hoặc theo đồng hồ trạm (>=0)
+        data.kwh = Math.round((calculatedWhTotal / 1000) * 100) / 100;  // Wh_total quy đổi kWh (dùng cho UI)
+        data.costEstimate = Math.round(data.kwh * this.pricePerKwh);     // kWh*price, làm tròn, để UI hiện tức thời
+      }
+
+      // Cập nhật công suất hiện tại
+      if (statusData.W_now !== undefined) {
+        data.W_now = statusData.W_now;                    // công suất hiện tại (W)
+      }
+
+      logger.info(`[RTDB] updating connector: live/stations/${stationId}/connectors/${connectorId}`);
+      await connectorRef.update(data);
+
+      logger.info(`✅ Connector status updated: ${stationId}/${connectorId} - ${statusData.status}`);
       return true;
     } catch (error) {
-      logger.error('Error updating meter values in Realtime DB:', error);
+      logger.error('Error updating connector status:', error);
       return false;
     }
   }
 
-  // System statistics
-  async updateSystemStats(stats) {
+  // Cập nhật meter values cho connector - FIX chính ở đây
+  async updateConnectorMeterValues(stationId, connectorId, meterData) {
     if (!this.isAvailable()) return false;
 
     try {
-      const statsRef = this.db.ref('systemStats');
-      const data = {
-        ...stats,
-        lastUpdate: getTimestamp()
-      };
+      // Lấy thông tin connector hiện tại để biết txId
+      const connectorSnapshot = await this.db.ref(`live/stations/${stationId}/connectors/${connectorId}`).once('value');
+      const currentConnectorData = connectorSnapshot.val();
       
-      await statsRef.set(data);
-      logger.debug('System stats updated in Realtime DB');
+      if (!currentConnectorData || !currentConnectorData.txId) {
+        logger.warn(`No active transaction for connector ${stationId}/${connectorId}, skipping meter update`);
+        return false;
+      }
+
+      const currentTxId = currentConnectorData.txId;
+      const currentWhReading = meterData.currentWhReading || meterData.Wh_reading || 0;
+      
+      // Tính Wh_total chính xác cho phiên hiện tại
+      const calculatedWhTotal = await this.calculateWhTotal(stationId, connectorId, currentTxId, currentWhReading);
+      
+      const connectorRef = this.db.ref(`live/stations/${stationId}/connectors/${connectorId}`);
+      const data = {
+        Wh_total: calculatedWhTotal,                      // tổng Wh lũy kế trong phiên hoặc theo đồng hồ trạm (>=0)
+        W_now: meterData.W_now || meterData.power || 0,   // công suất hiện tại (W)
+        lastUpdate: getTimestamp()                        // epoch millis (server time)
+      };
+
+      // Tính toán giá trị hiển thị cho app
+      data.kwh = Math.round((calculatedWhTotal / 1000) * 100) / 100;        // Wh_total quy đổi kWh (dùng cho UI)
+      data.costEstimate = Math.round(data.kwh * this.pricePerKwh);           // kWh*price, làm tròn, để UI hiện tức thời
+
+      await connectorRef.update(data);
       return true;
     } catch (error) {
-      logger.error('Error updating system stats in Realtime DB:', error);
+      logger.error('Error updating connector meter values:', error);
       return false;
     }
   }
 
-  // Real-time events
+  // Hàm tính toán Wh_total chính xác cho phiên
+  async calculateWhTotal(stationId, connectorId, transactionId, currentWhReading) {
+    const transactionKey = `${stationId}-${connectorId}-${transactionId}`;
+    
+    // Lấy giá trị bắt đầu từ cache
+    let startWhValue = this.transactionStartValues.get(transactionKey);
+    
+    // Nếu không có trong cache, lấy từ database
+    if (startWhValue === undefined) {
+      try {
+        const connectorSnapshot = await this.db.ref(`live/stations/${stationId}/connectors/${connectorId}`).once('value');
+        const connectorData = connectorSnapshot.val();
+        
+        // Tìm transaction này trong lịch sử để lấy giá trị bắt đầu
+        // Hoặc sử dụng giá trị mặc định nếu không tìm thấy
+        startWhValue = 0; // Mặc định cho transaction mới
+        
+        // Lưu vào cache cho lần sau
+        this.transactionStartValues.set(transactionKey, startWhValue);
+        logger.debug(`Retrieved start Wh from DB for ${transactionKey}: ${startWhValue}`);
+      } catch (error) {
+        logger.error('Error retrieving start Wh value:', error);
+        startWhValue = 0;
+      }
+    }
+    
+    // Tính Wh_total = hiện tại - bắt đầu
+    const whTotal = Math.max(0, currentWhReading - startWhValue);
+    
+    return whTotal;
+  }
+
+  // Cập nhật transaction ID cho connector - cải thiện
+  async updateConnectorTransaction(stationId, connectorId, transactionId, startWhValue = 0) {
+    if (!this.isAvailable()) return false;
+
+    try {
+      if (transactionId) {
+        // Bắt đầu transaction mới
+        return await this.startTransaction(stationId, connectorId, transactionId, startWhValue);
+      } else {
+        // Kết thúc transaction hiện tại
+        const connectorSnapshot = await this.db.ref(`live/stations/${stationId}/connectors/${connectorId}/txId`).once('value');
+        const currentTxId = connectorSnapshot.val();
+        
+        if (currentTxId) {
+          return await this.stopTransaction(stationId, connectorId, currentTxId);
+        }
+        
+        return true;
+      }
+    } catch (error) {
+      logger.error('Error updating connector transaction:', error);
+      return false;
+    }
+  }
+
+
+
+  // Getter methods để đọc dữ liệu realtime
+  async getStationLiveData(stationId) {
+    if (!this.isAvailable()) return null;
+
+    try {
+      const snapshot = await this.db.ref(`live/stations/${stationId}`).once('value');
+      return snapshot.val();
+    } catch (error) {
+      logger.error('Error getting station live data:', error);
+      return null;
+    }
+  }
+
+  async getConnectorLiveData(stationId, connectorId) {
+    if (!this.isAvailable()) return null;
+
+    try {
+      const snapshot = await this.db.ref(`live/stations/${stationId}/connectors/${connectorId}`).once('value');
+      return snapshot.val();
+    } catch (error) {
+      logger.error('Error getting connector live data:', error);
+      return null;
+    }
+  }
+
+  async getAllStationsLiveData() {
+    if (!this.isAvailable()) return null;
+
+    try {
+      const snapshot = await this.db.ref('live/stations').once('value');
+      return snapshot.val();
+    } catch (error) {
+      logger.error('Error getting all stations live data:', error);
+      return null;
+    }
+  }
+
+  // Listeners cho realtime updates
+  listenToStationLiveData(stationId, callback) {
+    if (!this.isAvailable()) return null;
+
+    const path = `live/stations/${stationId}`;
+    const ref = this.db.ref(path);
+    
+    ref.on('value', (snapshot) => {
+      const data = snapshot.val();
+      callback(data);
+    });
+    
+    this.listeners.set(path, ref);
+    logger.debug(`Listening to station live data: ${stationId}`);
+    return ref;
+  }
+
+  listenToConnectorLiveData(stationId, connectorId, callback) {
+    if (!this.isAvailable()) return null;
+
+    const path = `live/stations/${stationId}/connectors/${connectorId}`;
+    const ref = this.db.ref(path);
+    
+    ref.on('value', (snapshot) => {
+      const data = snapshot.val();
+      callback(data);
+    });
+    
+    this.listeners.set(path, ref);
+    logger.debug(`Listening to connector live data: ${stationId}/${connectorId}`);
+    return ref;
+  }
+
+  listenToAllStationsLiveData(callback) {
+    if (!this.isAvailable()) return null;
+
+    const path = 'live/stations';
+    const ref = this.db.ref(path);
+    
+    ref.on('value', (snapshot) => {
+      const data = snapshot.val();
+      callback(data);
+    });
+    
+    this.listeners.set(path, ref);
+    logger.debug('Listening to all stations live data');
+    return ref;
+  }
+
+  // Listener cho Owner - chỉ nghe stations của owner đó
+  listenToOwnerStations(ownerId, callback) {
+    if (!this.isAvailable()) return null;
+
+    const path = `live/stations_by_owner/${ownerId}`;
+    const ref = this.db.ref('live/stations').orderByChild('ownerId').equalTo(ownerId);
+    
+    ref.on('value', (snapshot) => {
+      const data = snapshot.val();
+      callback(data);
+    });
+    
+    this.listeners.set(path, ref);
+    logger.debug(`Listening to owner stations: ${ownerId}`);
+    return ref;
+  }
+
+  // Utility methods
+  setPricePerKwh(price) {
+    this.pricePerKwh = price;
+    logger.info(`Price per kWh updated: ${price} VND`);
+  }
+
+  getPricePerKwh() {
+    return this.pricePerKwh;
+  }
+
+  // Remove station từ live data khi offline hoàn toàn
+  async removeStationFromLive(stationId) {
+    if (!this.isAvailable()) return false;
+
+    try {
+      const stationRef = this.db.ref(`live/stations/${stationId}`);
+      await stationRef.remove();
+      logger.info(`Station removed from live data: ${stationId}`);
+      return true;
+    } catch (error) {
+      logger.error('Error removing station from live data:', error);
+      return false;
+    }
+  }
+
+  // Remove connector từ live data
+  async removeConnectorFromLive(stationId, connectorId) {
+    if (!this.isAvailable()) return false;
+
+    try {
+      const connectorRef = this.db.ref(`live/stations/${stationId}/connectors/${connectorId}`);
+      await connectorRef.remove();
+      logger.info(`Connector removed from live data: ${stationId}/${connectorId}`);
+      return true;
+    } catch (error) {
+      logger.error('Error removing connector from live data:', error);
+      return false;
+    }
+  }
+
+  // Events và notifications (giữ lại từ code cũ)
   async publishEvent(eventType, eventData) {
     if (!this.isAvailable()) return false;
 
@@ -128,16 +444,15 @@ class RealtimeService {
       };
       
       await newEventRef.set(data);
-      logger.debug(`Event published to Realtime DB: ${eventType}`);
+      logger.debug(`Event published: ${eventType}`);
       return true;
     } catch (error) {
-      logger.error('Error publishing event to Realtime DB:', error);
+      logger.error('Error publishing event:', error);
       return false;
     }
   }
 
-  // Live notifications
-  async sendNotification(type, message, targetStations = null) {
+  async sendNotification(type, message, targetStations = null, targetOwnerId = null) {
     if (!this.isAvailable()) return false;
 
     try {
@@ -147,21 +462,22 @@ class RealtimeService {
         type,
         message,
         targetStations,
+        targetOwnerId,
         timestamp: getTimestamp(),
         id: notificationRef.key,
         read: false
       };
       
       await notificationRef.set(data);
-      logger.debug(`Notification sent via Realtime DB: ${type}`);
+      logger.debug(`Notification sent: ${type}`);
       return true;
     } catch (error) {
-      logger.error('Error sending notification via Realtime DB:', error);
+      logger.error('Error sending notification:', error);
       return false;
     }
   }
 
-  // Command queue for remote operations
+  // Commands (giữ lại cho remote control)
   async sendCommand(stationId, command, parameters = {}) {
     if (!this.isAvailable()) return false;
 
@@ -180,7 +496,7 @@ class RealtimeService {
       logger.debug(`Command sent to ${stationId}: ${command}`);
       return commandRef.key;
     } catch (error) {
-      logger.error('Error sending command via Realtime DB:', error);
+      logger.error('Error sending command:', error);
       return false;
     }
   }
@@ -203,79 +519,9 @@ class RealtimeService {
       logger.debug(`Command status updated: ${stationId}/${commandId} -> ${status}`);
       return true;
     } catch (error) {
-      logger.error('Error updating command status in Realtime DB:', error);
+      logger.error('Error updating command status:', error);
       return false;
     }
-  }
-
-  // Data listeners
-  listenToStationStatus(stationId, callback) {
-    if (!this.isAvailable()) return null;
-
-    const path = `stations/${stationId}`;
-    const ref = this.db.ref(path);
-    
-    ref.on('value', (snapshot) => {
-      const data = snapshot.val();
-      callback(data);
-    });
-    
-    this.listeners.set(path, ref);
-    logger.debug(`Listening to station status: ${stationId}`);
-    return ref;
-  }
-
-  listenToConnectorStatus(stationId, connectorId, callback) {
-    if (!this.isAvailable()) return null;
-
-    const path = `stations/${stationId}/connectors/${connectorId}`;
-    const ref = this.db.ref(path);
-    
-    ref.on('value', (snapshot) => {
-      const data = snapshot.val();
-      callback(data);
-    });
-    
-    this.listeners.set(path, ref);
-    logger.debug(`Listening to connector status: ${stationId}/${connectorId}`);
-    return ref;
-  }
-
-  listenToSystemStats(callback) {
-    if (!this.isAvailable()) return null;
-
-    const path = 'systemStats';
-    const ref = this.db.ref(path);
-    
-    ref.on('value', (snapshot) => {
-      const data = snapshot.val();
-      callback(data);
-    });
-    
-    this.listeners.set(path, ref);
-    logger.debug('Listening to system stats');
-    return ref;
-  }
-
-  listenToEvents(callback, eventType = null) {
-    if (!this.isAvailable()) return null;
-
-    let ref;
-    if (eventType) {
-      ref = this.db.ref('events').orderByChild('type').equalTo(eventType);
-    } else {
-      ref = this.db.ref('events').orderByChild('timestamp').limitToLast(50);
-    }
-    
-    ref.on('child_added', (snapshot) => {
-      const data = snapshot.val();
-      callback(data);
-    });
-    
-    const path = `events${eventType ? `_${eventType}` : ''}`;
-    this.listeners.set(path, ref);
-    logger.debug(`Listening to events${eventType ? ` (${eventType})` : ''}`);
-    return ref;
   }
 
   listenToCommands(stationId, callback) {
@@ -314,37 +560,12 @@ class RealtimeService {
     logger.info('Stopped all Realtime DB listeners');
   }
 
-  // Data retrieval
-  async getStationStatus(stationId) {
-    if (!this.isAvailable()) return null;
-
-    try {
-      const snapshot = await this.db.ref(`stations/${stationId}`).once('value');
-      return snapshot.val();
-    } catch (error) {
-      logger.error('Error getting station status from Realtime DB:', error);
-      return null;
-    }
-  }
-
-  async getSystemStats() {
-    if (!this.isAvailable()) return null;
-
-    try {
-      const snapshot = await this.db.ref('systemStats').once('value');
-      return snapshot.val();
-    } catch (error) {
-      logger.error('Error getting system stats from Realtime DB:', error);
-      return null;
-    }
-  }
-
-  // Cleanup expired data
+  // Cleanup - cập nhật để phù hợp với cấu trúc mới
   async cleanupExpiredData() {
     if (!this.isAvailable()) return false;
 
     try {
-      const cutoffTime = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(); // 24 hours ago
+      const cutoffTime = getTimestamp() - (24 * 60 * 60 * 1000); // 24 hours ago
       
       // Clean up old events
       const eventsRef = this.db.ref('events');
@@ -352,11 +573,11 @@ class RealtimeService {
       
       if (oldEvents.exists()) {
         await oldEvents.ref.remove();
-        logger.info('Cleaned up expired events from Realtime DB');
+        logger.info('Cleaned up expired events');
       }
       
       // Clean up completed commands older than 1 hour
-      const commandsCutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const commandsCutoff = getTimestamp() - (60 * 60 * 1000);
       const commandsRef = this.db.ref('commands');
       const stationsSnapshot = await commandsRef.once('value');
       
@@ -371,12 +592,53 @@ class RealtimeService {
             }
           }
         }
-        logger.info('Cleaned up expired commands from Realtime DB');
+        logger.info('Cleaned up expired commands');
+      }
+
+      // Clean up offline stations after 1 hour
+      const offlineCutoff = getTimestamp() - (60 * 60 * 1000);
+      const liveStationsRef = this.db.ref('live/stations');
+      const liveStationsSnapshot = await liveStationsRef.once('value');
+      
+      if (liveStationsSnapshot.exists()) {
+        const stations = liveStationsSnapshot.val();
+        for (const stationId in stations) {
+          const station = stations[stationId];
+          if (!station.online && station.lastHeartbeat < offlineCutoff) {
+            await liveStationsRef.child(stationId).remove();
+            logger.info(`Removed offline station from live data: ${stationId}`);
+          }
+        }
+      }
+
+      // Clean up transaction cache for inactive transactions
+      const activeTransactions = new Set();
+      if (liveStationsSnapshot.exists()) {
+        const stations = liveStationsSnapshot.val();
+        for (const stationId in stations) {
+          const station = stations[stationId];
+          if (station.connectors) {
+            for (const connectorId in station.connectors) {
+              const connector = station.connectors[connectorId];
+              if (connector.txId) {
+                activeTransactions.add(`${stationId}-${connectorId}-${connector.txId}`);
+              }
+            }
+          }
+        }
+      }
+      
+      // Xóa các transaction cũ khỏi cache
+      for (const transactionKey of this.transactionStartValues.keys()) {
+        if (!activeTransactions.has(transactionKey)) {
+          this.transactionStartValues.delete(transactionKey);
+          logger.debug(`Cleaned up transaction cache: ${transactionKey}`);
+        }
       }
       
       return true;
     } catch (error) {
-      logger.error('Error cleaning up expired data from Realtime DB:', error);
+      logger.error('Error cleaning up expired data:', error);
       return false;
     }
   }
