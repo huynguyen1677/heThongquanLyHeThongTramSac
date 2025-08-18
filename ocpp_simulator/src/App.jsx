@@ -358,7 +358,7 @@ function App() {
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       // 2. Start transaction
-      await handleLocalStart(connectorId, 30);
+      await handleLocalStart(connectorId, 11);
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       // 3. Send 4 meter values (wait 5 seconds each)

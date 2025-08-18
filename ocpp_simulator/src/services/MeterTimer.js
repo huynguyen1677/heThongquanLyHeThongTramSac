@@ -17,8 +17,9 @@ export class MeterTimer {
     this.transactionId = null;
     this.meterStart = 0; // Giá trị meter lúc bắt đầu
     this.currentMeterValue = 0; // Giá trị meter hiện tại (tính bằng Wh)
-    this.powerKw = 30; // Công suất sạc mặc định (kW)
+    this.powerKw = 11; // Công suất sạc mặc định (kW)
     this.startTime = null; // Thời điểm bắt đầu sạc
+    this.pricePerKwh = 3210.9; // Giá điện giả định
   }
 
   /**
@@ -30,7 +31,7 @@ export class MeterTimer {
    */
 
   // Start meter timer for a transaction
-  start(transactionId, meterStart, powerKw = 30, intervalSeconds = 2) {
+  start(transactionId, meterStart, powerKw = 11, intervalSeconds = 2) {
     if (this.isRunning) {
       this.stop();
     }
@@ -69,31 +70,35 @@ export class MeterTimer {
     }
   }
 
-    /**
+  // Hàm để tính công suất hiện tại
+  calculateCurrentPowerKw(chargingTimeMinutes) {
+    let currentPowerKw = this.powerKw;
+    if (chargingTimeMinutes < 1) {
+      currentPowerKw = this.powerKw * (chargingTimeMinutes / 1);
+    } else if (chargingTimeMinutes > 30) {
+      const fadeStart = 30;
+      const fadeMinutes = chargingTimeMinutes - fadeStart;
+      const fadeFactor = Math.max(0.3, 1 - (fadeMinutes / 60));
+      currentPowerKw = this.powerKw * fadeFactor;
+    }
+    // Thêm biến động ngẫu nhiên ±10%
+    const variation = 0.9 + (Math.random() * 0.2);
+    currentPowerKw = Math.max(0, currentPowerKw * variation);
+    return currentPowerKw;
+  }
+
+  /**
    * Lấy các thông số sạc hiện tại để hiển thị trên UI.
    * @returns {object}
    */
   getChargingStats() {
     const energyKwh = (this.currentMeterValue - this.meterStart) / 1000;
-    const pricePerKwh = 2380; // Giá điện giả định
-    const cost = energyKwh * pricePerKwh;
+    const cost = energyKwh * this.pricePerKwh;
 
-    // Tính công suất hiện tại theo cùng logic như sendMeterValues
     let currentPowerKw = this.powerKw;
     if (this.startTime) {
       const chargingTimeMinutes = (new Date() - this.startTime) / (1000 * 60);
-      
-      if (chargingTimeMinutes < 5) {
-        currentPowerKw = this.powerKw * (chargingTimeMinutes / 5);
-      } else if (chargingTimeMinutes > 30) {
-        const fadeStart = 30;
-        const fadeMinutes = chargingTimeMinutes - fadeStart;
-        const fadeFactor = Math.max(0.3, 1 - (fadeMinutes / 60));
-        currentPowerKw = this.powerKw * fadeFactor;
-      }
-      
-      const variation = 0.9 + (Math.random() * 0.2);
-      currentPowerKw = Math.max(0, currentPowerKw * variation);
+      currentPowerKw = this.calculateCurrentPowerKw(chargingTimeMinutes);
     }
 
     return {
@@ -103,7 +108,8 @@ export class MeterTimer {
       powerKw: Math.round(currentPowerKw * 100) / 100, // Công suất thực tế hiện tại
       duration: this.getChargingDuration(),
       estimatedCost: Math.round(cost / 100) * 100, // Làm tròn đến trăm đồng
-      isRunning: this.isRunning
+      isRunning: this.isRunning,
+      pricePerKwh: this.pricePerKwh
     };
   }
 
@@ -166,29 +172,8 @@ export class MeterTimer {
     if (!this.isRunning || !this.transactionId) {
       return;
     }
-
-    // 1. Mô phỏng công suất thay đổi theo thời gian (realistic charging pattern)
     const chargingTimeMinutes = (new Date() - this.startTime) / (1000 * 60);
-    let currentPowerKw = this.powerKw;
-    
-    // Mô phỏng quá trình sạc thực tế:
-    if (chargingTimeMinutes < 1) {
-      // 2 phút đầu: ramp up từ 0 đến power đầy
-      currentPowerKw = this.powerKw * (chargingTimeMinutes / 1);
-    } else if (chargingTimeMinutes > 30) {
-      // Sau 30 phút: giảm dần (battery gần đầy)
-      const fadeStart = 30;
-      const fadeMinutes = chargingTimeMinutes - fadeStart;
-      const fadeFactor = Math.max(0.3, 1 - (fadeMinutes / 60)); // Giảm dần, tối thiểu 30%
-      currentPowerKw = this.powerKw * fadeFactor;
-    }
-    
-    // Thêm một chút biến động ngẫu nhiên ±10%
-    const variation = 0.9 + (Math.random() * 0.2); // 0.9 to 1.1
-    currentPowerKw = currentPowerKw * variation;
-    
-    // Đảm bảo không âm và làm tròn
-    currentPowerKw = Math.max(0, currentPowerKw);
+    let currentPowerKw = this.calculateCurrentPowerKw(chargingTimeMinutes);
 
     // 2. Tính toán lượng điện năng tiêu thụ trong chu kỳ vừa qua
     const deltaTimeHours = this.interval / (1000 * 3600); // Đổi mili-giây sang giờ

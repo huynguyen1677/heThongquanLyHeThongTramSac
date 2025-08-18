@@ -27,8 +27,8 @@ const ConnectorCard = ({
     confirmationCode: '',
     confirmed: false
   });
-  
-  const [powerKw, setPowerKw] = useState(30);
+
+  const [powerKw, setPowerKw] = useState(11);
   const [stats, setStats] = useState(INITIAL_STATS);
 
   // Update stats from meter timer
@@ -70,8 +70,8 @@ const ConnectorCard = ({
   };
 
   const isReadyToStart = () => {
-    return preCheck.parked && preCheck.plugged && preCheck.confirmed && 
-           status === 'Available' && isConnected;
+    return preCheck.parked && preCheck.plugged && preCheck.confirmed &&
+      status === 'Available' && isConnected;
   };
 
   const canStop = () => {
@@ -136,13 +136,6 @@ const ConnectorCard = ({
     );
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('vi-VN', {
-      style: 'currency',
-      currency: 'VND'
-    }).format(amount);
-  };
-
   return (
     <div className="connector-card">
       <div className="connector-header">
@@ -163,7 +156,7 @@ const ConnectorCard = ({
             />
             🚗 Xe đã đỗ đúng vị trí
           </label>
-          
+
           <label className="checkbox-item">
             <input
               type="checkbox"
@@ -183,7 +176,7 @@ const ConnectorCard = ({
               disabled={status !== 'Available' || preCheck.confirmed}
               maxLength={4}
             />
-            <button 
+            <button
               onClick={handleConfirmCode}
               disabled={status !== 'Available' || preCheck.confirmed || preCheck.confirmationCode.length !== 4}
               className="btn btn-small"
@@ -202,13 +195,32 @@ const ConnectorCard = ({
             type="number"
             value={powerKw}
             onChange={(e) => handlePowerChange(parseFloat(e.target.value) || 0)}
-            min="0.1"
-            max="22"
-            step="0.1"
+            min="3.5"
+            max="15"
+            step="0.5"
             disabled={!isConnected}
           />
+          <button
+            className="btn btn-small"
+            onClick={() => handlePowerChange(3.5)}
+            disabled={!isConnected}
+            style={{ marginLeft: 8 }}
+          >
+            Sạc chậm
+          </button>
+          <button
+            className="btn btn-small"
+            onClick={() => handlePowerChange(11)}
+            disabled={!isConnected}
+            style={{ marginLeft: 4 }}
+          >
+            Sạc nhanh
+          </button>
         </div>
-
+        <div className="info-item">
+          <label>Giá điện:</label>
+          <span>3.210,9 ₫/kWh</span>
+        </div>
         <div className="action-buttons">
           <button
             className="btn btn-success"
@@ -217,7 +229,7 @@ const ConnectorCard = ({
           >
             🚀 Bắt đầu sạc (Local)
           </button>
-          
+
           <button
             className="btn btn-danger"
             onClick={handleLocalStop}
@@ -238,7 +250,7 @@ const ConnectorCard = ({
               <span>{stats.transactionId || transactionId || 'N/A'}</span>
             </div>
             <div className="info-item">
-              <label>Năng lượng:</label>
+              <label>Đã sạc:</label>
               <span>{stats.energyKwh.toFixed(3)} kWh</span>
             </div>
             <div className="info-item">
@@ -250,12 +262,12 @@ const ConnectorCard = ({
               <span>{stats.duration}</span>
             </div>
             <div className="info-item">
-              <label>Tổng Wh:</label>
-              <span>{stats.currentMeterValue} Wh</span>
+              <label>Tổng Kwh của trạm:</label>
+              <span>{(stats.currentMeterValue / 1000).toFixed(3)} kWh</span>
             </div>
             <div className="info-item">
               <label>Giá ước tính:</label>
-              <span className="cost">{formatCurrency(stats.estimatedCost)}</span>
+              <span>{stats.estimatedCost.toLocaleString()} ₫</span>
             </div>
           </div>
         </div>
@@ -272,7 +284,7 @@ const ConnectorCard = ({
           >
             ⚠️ Báo lỗi
           </button>
-          
+
           <button
             className="btn btn-secondary btn-small"
             onClick={() => handleStatusAction('Available')}
@@ -280,7 +292,7 @@ const ConnectorCard = ({
           >
             ✅ Khôi phục
           </button>
-          
+
           <button
             className="btn btn-gray btn-small"
             onClick={() => handleStatusAction('Unavailable')}
