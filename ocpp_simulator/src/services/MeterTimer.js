@@ -17,7 +17,7 @@ export class MeterTimer {
     this.transactionId = null;
     this.meterStart = 0; // Giá trị meter lúc bắt đầu
     this.currentMeterValue = 0; // Giá trị meter hiện tại (tính bằng Wh)
-    this.powerKw = 3.5; // Công suất sạc mặc định (kW)
+    this.powerKw = 30; // Công suất sạc mặc định (kW)
     this.startTime = null; // Thời điểm bắt đầu sạc
   }
 
@@ -30,7 +30,7 @@ export class MeterTimer {
    */
 
   // Start meter timer for a transaction
-  start(transactionId, meterStart, powerKw = 3.5, intervalSeconds = 5) {
+  start(transactionId, meterStart, powerKw = 30, intervalSeconds = 2) {
     if (this.isRunning) {
       this.stop();
     }
@@ -172,9 +172,9 @@ export class MeterTimer {
     let currentPowerKw = this.powerKw;
     
     // Mô phỏng quá trình sạc thực tế:
-    if (chargingTimeMinutes < 5) {
-      // 5 phút đầu: ramp up từ 0 đến power đầy
-      currentPowerKw = this.powerKw * (chargingTimeMinutes / 5);
+    if (chargingTimeMinutes < 1) {
+      // 2 phút đầu: ramp up từ 0 đến power đầy
+      currentPowerKw = this.powerKw * (chargingTimeMinutes / 1);
     } else if (chargingTimeMinutes > 30) {
       // Sau 30 phút: giảm dần (battery gần đầy)
       const fadeStart = 30;

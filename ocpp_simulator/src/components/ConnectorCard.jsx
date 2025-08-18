@@ -28,7 +28,7 @@ const ConnectorCard = ({
     confirmed: false
   });
   
-  const [powerKw, setPowerKw] = useState(3.5);
+  const [powerKw, setPowerKw] = useState(30);
   const [stats, setStats] = useState(INITIAL_STATS);
 
   // Update stats from meter timer
