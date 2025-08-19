@@ -7,6 +7,8 @@ import { sessions } from './sessions.js';
 import { generateUID } from '../utils/uid.js';
 import { getTimestamp } from '../utils/time.js';
 import { connectorService } from '../services/connectorService.js';
+import { syncService } from '../services/syncService.js';
+import { realtimeService } from '../services/realtime.js';
 
 export class OcppWebSocketServer {
   constructor(options = {}) {
@@ -209,6 +211,12 @@ export class OcppWebSocketServer {
         stationInfo.latitude = payload.latitude;
         stationInfo.longitude = payload.longitude;
       }
+      
+      // Add ownerId if provided
+      if (payload.ownerId) {
+        stationInfo.ownerId = payload.ownerId;
+        logger.info(`✅ Added ownerId: ${payload.ownerId} for station ${stationId}`);
+      }
 
       sessions.updateStationInfo(stationId, stationInfo);
       
@@ -240,6 +248,25 @@ export class OcppWebSocketServer {
       logger.info(`📤 About to send BootNotification response: ${JSON.stringify(response)}`);
       this.sendCallResult(stationId, messageId, response);
       logger.info(`✅ BootNotification response sent successfully for ${stationId}`);
+
+      // Sync station data to Firestore khi có kết nối mới
+      if (syncService && syncService.isRunning && realtimeService.isAvailable()) {
+        try {
+          const liveData = await realtimeService.getStationLiveData(stationId);
+          if (liveData) {
+            // Thêm thông tin owner nếu có trong boot notification
+            if (payload.ownerId) {
+              liveData.ownerId = payload.ownerId;
+            }
+            
+            await syncService.syncOnStationConnect(stationId, liveData);
+            logger.info(`✅ Synced station ${stationId} to Firestore on boot`);
+          }
+        } catch (syncError) {
+          logger.error(`❌ Failed to sync station ${stationId} on boot:`, syncError);
+          // Don't fail the boot notification if sync fails
+        }
+      }
       
     } catch (error) {
       logger.error(`❌ Error in handleBootNotification for ${stationId}:`, error);

@@ -88,6 +88,7 @@ function App() {
         chargePointVendor: config.vendor,
         chargePointModel: config.model,
         firmwareVersion: config.firmwareVersion,
+        ownerId: config.ownerId, // Thêm ownerId vào payload
         // Include location information in BootNotification
         chargePointSerialNumber: config.stationId,
         iccid: config.stationId,

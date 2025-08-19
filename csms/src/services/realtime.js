@@ -65,6 +65,12 @@ class RealtimeService {
       
       await stationRef.update(data);
       logger.info(`Station ${stationId} online status updated: ${isOnline}${stationInfo.address ? ` at ${stationInfo.address}` : ''}`);
+      
+      // Trigger sync to Firestore khi station online
+      if (isOnline) {
+        this.triggerStationSync(stationId, data);
+      }
+      
       return true;
     } catch (error) {
       logger.error('Error updating station online status:', error);
@@ -691,6 +697,20 @@ class RealtimeService {
       logger.error('Error cleaning up expired data:', error);
       return false;
     }
+  }
+
+  // Trigger sync to Firestore (không chặn luồng chính)
+  triggerStationSync(stationId, stationData) {
+    // Import động để tránh circular dependency
+    import('./syncService.js').then(({ syncService }) => {
+      if (syncService && syncService.isRunning) {
+        syncService.syncSingleStation(stationId, stationData).catch(error => {
+          logger.error(`Error syncing station ${stationId} to Firestore:`, error);
+        });
+      }
+    }).catch(error => {
+      logger.debug('SyncService not available:', error.message);
+    });
   }
 }
 
