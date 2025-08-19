@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import './ConnectorCard.css';
 
+
 const INITIAL_STATS = {
   transactionId: null,
   currentMeterValue: 0,
@@ -8,7 +9,7 @@ const INITIAL_STATS = {
   powerKw: 0,
   duration: '00:00:00',
   estimatedCost: 0,
-  isRunning: false
+  isRunning: false,
 };
 
 const ConnectorCard = ({
@@ -31,9 +32,32 @@ const ConnectorCard = ({
   const [powerKw, setPowerKw] = useState(11);
   const [stats, setStats] = useState(INITIAL_STATS);
 
+  // Cập nhật giá điện từ API khi component mount
+  useEffect(() => {
+    const updatePriceFromApi = async () => {
+      if (meterTimer) {
+        try {
+          const apiUrl = 'http://localhost:3000/api/settings/price-per-kwh';
+          await meterTimer.updatePricePerKwhFromApi(apiUrl);
+          // Cập nhật stats ngay sau khi cập nhật giá điện
+          setStats(meterTimer.getChargingStats());
+        } catch (error) {
+          console.error('Lỗi khi cập nhật giá điện:', error);
+        }
+      }
+    };
+
+    updatePriceFromApi();
+  }, [meterTimer]);
+
   // Update stats from meter timer
   useEffect(() => {
     let interval = null;
+
+    // Cập nhật stats ban đầu
+    if (meterTimer) {
+      setStats(meterTimer.getChargingStats());
+    }
 
     // Chỉ chạy interval khi đang ở trạng thái 'Charging'
     if (status === 'Charging' && meterTimer?.isActive()) {
@@ -41,8 +65,11 @@ const ConnectorCard = ({
       interval = setInterval(() => {
         setStats(meterTimer.getChargingStats());
       }, 1000);
+    } else if (meterTimer && status === 'Available') {
+      // Nếu không sạc nhưng có meterTimer, vẫn hiển thị thông tin cơ bản (giá điện)
+      setStats(meterTimer.getChargingStats());
     } else {
-      // Nếu không sạc, reset lại các thông số
+      // Nếu không có meterTimer, reset lại các thông số
       setStats(INITIAL_STATS);
     }
 
@@ -219,7 +246,29 @@ const ConnectorCard = ({
         </div>
         <div className="info-item">
           <label>Giá điện:</label>
-          <span>3.210,9 ₫/kWh</span>
+          <span>
+            {(stats.pricePerKwh !== undefined && stats.pricePerKwh !== null)
+              ? stats.pricePerKwh.toLocaleString('vi-VN', { maximumFractionDigits: 1 })
+              : 'N/A'} ₫/kWh
+          </span>
+          <button
+            className="btn btn-small"
+            onClick={async () => {
+              if (meterTimer) {
+                try {
+                  const apiUrl = 'http://localhost:3000/api/settings/price-per-kwh';
+                  await meterTimer.updatePricePerKwhFromApi(apiUrl);
+                  setStats(meterTimer.getChargingStats());
+                } catch (error) {
+                  console.error('Lỗi khi cập nhật giá điện:', error);
+                }
+              }
+            }}
+            disabled={!isConnected}
+            style={{ marginLeft: 8 }}
+          >
+            🔄 Cập nhật giá
+          </button>
         </div>
         <div className="action-buttons">
           <button
@@ -267,7 +316,7 @@ const ConnectorCard = ({
             </div>
             <div className="info-item">
               <label>Giá ước tính:</label>
-              <span>{stats.estimatedCost.toLocaleString()} ₫</span>
+              <span>{stats.estimatedCost} ₫</span>
             </div>
           </div>
         </div>

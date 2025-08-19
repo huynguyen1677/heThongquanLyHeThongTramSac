@@ -1,3 +1,5 @@
+import { fetchPricePerKwh } from '../api/priceApi.js';
+
 export class MeterTimer {
     /**
    * Constructor của MeterTimer.
@@ -19,7 +21,7 @@ export class MeterTimer {
     this.currentMeterValue = 0; // Giá trị meter hiện tại (tính bằng Wh)
     this.powerKw = 11; // Công suất sạc mặc định (kW)
     this.startTime = null; // Thời điểm bắt đầu sạc
-    this.pricePerKwh = 3210.9; // Giá điện giả định
+    this.pricePerKwh = null; // Giá điện sẽ được cập nhật động
   }
 
   /**
@@ -30,15 +32,37 @@ export class MeterTimer {
    * @param {number} intervalSeconds - Chu kỳ gửi MeterValues (giây).
    */
 
+  /**
+   * Lấy giá điện từ API và cập nhật vào MeterTimer.
+   * @param {string} apiUrl - Đường dẫn API trả về { pricePerKwh: number }
+   */
+  async updatePricePerKwhFromApi(apiUrl) {
+    const price = await fetchPricePerKwh(apiUrl);
+    if (price) {
+      this.setPricePerKwh(price);
+    } else {
+      this.log('❌ Không lấy được giá điện hợp lệ từ API', 'error');
+    }
+  }
+
+  /**
+   * Cập nhật giá điện cho MeterTimer.
+   * @param {number} newPrice
+   */
+  setPricePerKwh(newPrice) {
+    this.pricePerKwh = newPrice;
+    this.log(`💲 Giá điện cập nhật: ${newPrice} VND/kWh`);
+  }
+
   // Start meter timer for a transaction
-  start(transactionId, meterStart, powerKw = 11, intervalSeconds = 2) {
+  start(transactionId, meterStart, powerKw = 11, intervalSeconds = 2, currentMeterValue = null) {
     if (this.isRunning) {
       this.stop();
     }
 
     this.transactionId = transactionId;
     this.meterStart = meterStart;
-    this.currentMeterValue = meterStart;
+    this.currentMeterValue = currentMeterValue !== null ? currentMeterValue : meterStart;
     this.powerKw = powerKw;
     this.interval = intervalSeconds * 1000;
     this.startTime = new Date();
@@ -93,7 +117,7 @@ export class MeterTimer {
    */
   getChargingStats() {
     const energyKwh = (this.currentMeterValue - this.meterStart) / 1000;
-    const cost = energyKwh * this.pricePerKwh;
+    const cost = energyKwh * (this.pricePerKwh || 0); // Sử dụng 0 nếu pricePerKwh là null
 
     let currentPowerKw = this.powerKw;
     if (this.startTime) {
@@ -107,9 +131,9 @@ export class MeterTimer {
       energyKwh: energyKwh,
       powerKw: Math.round(currentPowerKw * 100) / 100, // Công suất thực tế hiện tại
       duration: this.getChargingDuration(),
-      estimatedCost: Math.round(cost / 100) * 100, // Làm tròn đến trăm đồng
+      estimatedCost: cost.toFixed(0),
       isRunning: this.isRunning,
-      pricePerKwh: this.pricePerKwh
+      pricePerKwh: this.pricePerKwh || 0 // Trả về 0 nếu chưa có giá điện
     };
   }
 
@@ -222,12 +246,11 @@ export class MeterTimer {
 
   // Calculate estimated cost (flat rate)
   getEstimatedCost() {
-    const pricePerKwh = 2380; // VND per kWh
+    const pricePerKwh = this.pricePerKwh || 0; // Lấy giá điện động, sử dụng 0 nếu null
     const energyKwh = this.getEnergyConsumed();
     const cost = energyKwh * pricePerKwh;
     
-    // Round to nearest 100 VND
-    return Math.round(cost / 100) * 100;
+    return cost.toFixed(0); // Trả về giá trị làm tròn đến số nguyên
   }
 
 

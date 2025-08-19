@@ -14,6 +14,7 @@ import stationsRouter from './api/stations.js';
 import transactionsRouter from './api/transactions.js';
 import systemRouter from './api/system.js';
 import connectorsRouter from './api/connectors.js';
+import settingsRouter from './api/settings.js';
 
 class CSMSServer {
   constructor() {
@@ -116,6 +117,7 @@ class CSMSServer {
     this.app.use('/api/transactions', transactionsRouter);
     this.app.use('/api/system', systemRouter);
     this.app.use('/api/connectors', connectorsRouter);
+    this.app.use('/api/settings', settingsRouter);
 
     // Root endpoint with API info
     this.app.get('/', (req, res) => {

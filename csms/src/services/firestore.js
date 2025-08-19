@@ -363,6 +363,50 @@ class FirestoreService {
       return false;
     }
   }
+
+  // Giá điện (price per kWh) - lưu vào collection 'configuration', document 'pricePerKwh'
+  async getPricePerKwh() {
+    if (!this.isAvailable()) return null;
+
+    try {
+      const configRef = this.db.collection('setting').doc('pricePerKwh');
+      const doc = await configRef.get();
+      if (doc.exists) {
+        return doc.data().value;
+      }
+      return null;
+    } catch (error) {
+      logger.error('Error getting pricePerKwh from Firestore:', error);
+      return null;
+    }
+  }
+
+  async setPricePerKwh(newPrice) {
+    if (!this.isAvailable()) return false;
+
+    try {
+      const configRef = this.db.collection('setting').doc('pricePerKwh');
+      await configRef.set({
+        value: newPrice,
+        lastUpdated: getTimestamp()
+      });
+      logger.info(`Price per kWh updated in Firestore: ${newPrice}`);
+      return true;
+    } catch (error) {
+      logger.error('Error setting pricePerKwh in Firestore:', error);
+      return false;
+    }
+  }
+
+  listenPricePerKwh(callback) {
+    if (!this.isAvailable()) return;
+    this.db.collection('setting').doc('pricePerKwh')
+      .onSnapshot((doc) => {
+        if (doc.exists && typeof callback === 'function') {
+          callback(doc.data().value);
+        }
+      });
+  }
 }
 
 export const firestoreService = new FirestoreService();
