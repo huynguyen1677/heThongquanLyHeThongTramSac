@@ -56,11 +56,15 @@ class RealtimeService {
         stationName: stationInfo.stationName || null,
         vendor: stationInfo.vendor || null,
         model: stationInfo.model || null,
-        firmwareVersion: stationInfo.firmwareVersion || null
+        firmwareVersion: stationInfo.firmwareVersion || null,
+        // Location information
+        address: stationInfo.address || null,
+        latitude: stationInfo.latitude || null,
+        longitude: stationInfo.longitude || null
       };
       
       await stationRef.update(data);
-      logger.info(`Station ${stationId} online status updated: ${isOnline}`);
+      logger.info(`Station ${stationId} online status updated: ${isOnline}${stationInfo.address ? ` at ${stationInfo.address}` : ''}`);
       return true;
     } catch (error) {
       logger.error('Error updating station online status:', error);
@@ -83,7 +87,7 @@ class RealtimeService {
     }
   }
 
-  // Cập nhật thông tin station (vendor, model, firmware, v.v.)
+  // Cập nhật thông tin station (vendor, model, firmware, location, v.v.)
   async updateStationInfo(stationId, stationInfo) {
     if (!this.isAvailable()) return false;
 
@@ -96,6 +100,10 @@ class RealtimeService {
       if (stationInfo.vendor !== undefined) updateData.vendor = stationInfo.vendor;
       if (stationInfo.model !== undefined) updateData.model = stationInfo.model;
       if (stationInfo.firmwareVersion !== undefined) updateData.firmwareVersion = stationInfo.firmwareVersion;
+      // Location information
+      if (stationInfo.address !== undefined) updateData.address = stationInfo.address;
+      if (stationInfo.latitude !== undefined) updateData.latitude = stationInfo.latitude;
+      if (stationInfo.longitude !== undefined) updateData.longitude = stationInfo.longitude;
       
       await stationRef.update(updateData);
       logger.debug(`Station ${stationId} info updated:`, updateData);

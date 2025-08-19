@@ -21,7 +21,11 @@ class SessionManager {
         firmware: stationInfo.firmwareVersion || null,
         serialNumber: stationInfo.serialNumber || null,
         ownerId: stationInfo.ownerId || null,
-        stationName: stationInfo.stationName || null
+        stationName: stationInfo.stationName || null,
+        // Location information
+        address: stationInfo.address || null,
+        latitude: stationInfo.latitude || null,
+        longitude: stationInfo.longitude || null
       },
       connectors: new Map(), // connectorId -> ConnectorSession
       lastSeen: getTimestamp(),
@@ -32,16 +36,19 @@ class SessionManager {
 
     this.stations.set(stationId, station);
     
-    // Cập nhật theo cấu trúc mới của realtime
+    // Cập nhật theo cấu trúc mới của realtime với location info
     realtimeService.updateStationOnline(stationId, true, {
       ownerId: station.info.ownerId,
       stationName: station.info.stationName,
       vendor: station.info.vendor,
       model: station.info.model,
-      firmwareVersion: station.info.firmware
+      firmwareVersion: station.info.firmware,
+      address: station.info.address,
+      latitude: station.info.latitude,
+      longitude: station.info.longitude
     });
     
-    logger.info(`Station session created: ${stationId}`);
+    logger.info(`Station session created: ${stationId} at ${station.info.address} (${station.info.latitude}, ${station.info.longitude})`);
     return station;
   }
 
@@ -71,13 +78,16 @@ class SessionManager {
       station.info = { ...station.info, ...info };
       logger.debug(`Station info updated: ${stationId}`, station.info);
       
-      // Cập nhật thông tin trạm sạc theo cấu trúc mới
+      // Cập nhật thông tin trạm sạc theo cấu trúc mới bao gồm location
       realtimeService.updateStationInfo(stationId, {
         ownerId: station.info.ownerId,
         stationName: station.info.stationName,
         vendor: station.info.vendor,
         model: station.info.model,
-        firmwareVersion: station.info.firmware
+        firmwareVersion: station.info.firmware,
+        address: station.info.address,
+        latitude: station.info.latitude,
+        longitude: station.info.longitude
       });
     }
   }
@@ -204,14 +214,28 @@ class SessionManager {
 
     logger.info(`Connector ${stationId}/${connectorId} status: ${statusData.status}`);
     
-    // Cập nhật theo cấu trúc mới
-    realtimeService.updateConnectorStatus(stationId, connectorId, {
+    // Prepare data for Firebase realtime update
+    const realtimeData = {
       status: statusData.status,
       errorCode: connector.errorCode,
       txId: connector.currentTransaction,
       Wh_total: statusData.Wh_total,
       W_now: statusData.W_now
-    });
+    };
+
+    // Include safety check data if present
+    if (statusData.safetyCheck) {
+      realtimeData.safetyCheck = statusData.safetyCheck;
+      logger.info(`🔒 Safety check data being saved to Firebase for ${stationId}/${connectorId}:`, statusData.safetyCheck);
+    }
+
+    // Include additional info if present
+    if (statusData.info) {
+      realtimeData.info = statusData.info;
+    }
+
+    // Cập nhật Firebase theo cấu trúc mới
+    realtimeService.updateConnectorStatus(stationId, connectorId, realtimeData);
   }
 
   getStationConnectors(stationId) {

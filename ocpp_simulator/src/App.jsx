@@ -82,12 +82,25 @@ function App() {
       setConnectionStatus('connecting');
       // Connect to WebSocket
       await ocppClientRef.current.connect(config.stationId, config.ownerId);
-      // Send BootNotification
+      
+      // Send BootNotification with extended info
       const bootPayload = {
         chargePointVendor: config.vendor,
         chargePointModel: config.model,
-        firmwareVersion: config.firmwareVersion
+        firmwareVersion: config.firmwareVersion,
+        // Include location information in BootNotification
+        chargePointSerialNumber: config.stationId,
+        iccid: config.stationId,
+        imsi: config.stationId,
+        meterSerialNumber: config.stationId,
+        meterType: 'Energy',
+        // Custom location data (will be handled by CSMS)
+        stationName: config.stationName,
+        address: config.address,
+        latitude: config.latitude,
+        longitude: config.longitude
       };
+      
       const bootResponse = await ocppClientRef.current.sendCall('BootNotification', bootPayload);
       if (bootResponse.status === 'Accepted') {
         // Start heartbeat
@@ -115,6 +128,13 @@ function App() {
         for (const connector of newConnectors) {
           await sendStatusNotification(connector.id, connector.status);
         }
+
+        addLog({
+          type: 'log',
+          level: 'info',
+          message: `🗺️ Station location: ${config.stationName} at ${config.address} (${config.latitude}, ${config.longitude})`,
+          timestamp: new Date().toISOString()
+        });
       }
     } catch (error) {
       addLog({
@@ -152,23 +172,33 @@ function App() {
     }
   };
 
-  const sendStatusNotification = async (connectorId, status, errorCode = 'NoError') => {
+  const sendStatusNotification = async (connectorId, status, errorCode = 'NoError', additionalInfo = {}) => {
     const payload = {
       connectorId,
       status,
       errorCode,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      info: additionalInfo.info || undefined,
+      // Thêm metadata cho CSMS để lưu vào Firebase
+      ...additionalInfo
     };
 
     try {
       await ocppClientRef.current.sendCall('StatusNotification', payload);
       
-      // Update connector state
+      // Update connector state locally
       setConnectors(prev => prev.map(conn => 
         conn.id === connectorId 
-          ? { ...conn, status, errorCode }
+          ? { ...conn, status, errorCode, ...additionalInfo }
           : conn
       ));
+      
+      addLog({
+        type: 'log',
+        level: 'info',
+        message: `📡 StatusNotification sent: Connector ${connectorId} -> ${status}`,
+        timestamp: new Date().toISOString()
+      });
       
     } catch (error) {
       addLog({
@@ -184,12 +214,21 @@ function App() {
   const handleLocalStart = async (connectorId, powerKw) => {
     try {
       const connector = connectors.find(c => c.id === connectorId);
-      if (!connector || connector.status !== 'Available') {
-        throw new Error('Connector not available for start');
+      if (!connector) {
+        throw new Error('Connector not found');
       }
 
-      // 1. Gửi StatusNotification (Preparing)
-      await sendStatusNotification(connectorId, 'Preparing');
+      // Kiểm tra trạng thái connector - có thể là Available hoặc Preparing
+      if (!['Available', 'Preparing'].includes(connector.status)) {
+        throw new Error(`Connector not ready for start. Current status: ${connector.status}`);
+      }
+
+      // Nếu chưa ở trạng thái Preparing, chuyển sang Preparing trước
+      if (connector.status === 'Available') {
+        await sendStatusNotification(connectorId, 'Preparing');
+        // Delay ngắn để mô phỏng quá trình chuẩn bị
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
 
       // 2. Tùy chọn: Authorize
       try {
@@ -200,6 +239,13 @@ function App() {
         if (authResponse.idTagInfo.status !== 'Accepted') {
           throw new Error(`Authorization failed: ${authResponse.idTagInfo.status}`);
         }
+        
+        addLog({
+          type: 'log',
+          level: 'info',
+          message: `✅ Authorization successful for connector ${connectorId}`,
+          timestamp: new Date().toISOString()
+        });
       } catch (authError) {
         addLog({
           type: 'log',
@@ -327,13 +373,29 @@ function App() {
     }
   };
 
-  const handleStatusChange = async (connectorId, newStatus) => {
-    await sendStatusNotification(connectorId, newStatus);
+  const handleStatusChange = async (connectorId, newStatus, safetyCheckData = null) => {
+    const additionalInfo = {};
+    
+    // Nếu chuyển sang Preparing, bao gồm thông tin safety check
+    if (newStatus === 'Preparing' && safetyCheckData) {
+      additionalInfo.safetyCheck = {
+        vehicleParked: safetyCheckData.parked,
+        cablePlugged: safetyCheckData.plugged,
+        userConfirmed: safetyCheckData.confirmed,
+        timestamp: new Date().toISOString(),
+        passed: safetyCheckData.parked && safetyCheckData.plugged && safetyCheckData.confirmed
+      };
+      additionalInfo.info = `Safety check completed: ${additionalInfo.safetyCheck.passed ? 'PASSED' : 'FAILED'}`;
+    }
+    
+    await sendStatusNotification(connectorId, newStatus, 'NoError', additionalInfo);
     
     addLog({
       type: 'log',
       level: 'info',
-      message: `🔧 Connector ${connectorId} status changed to ${newStatus}`,
+      message: `🔧 Connector ${connectorId} status changed to ${newStatus}${
+        additionalInfo.safetyCheck ? ` (Safety: ${additionalInfo.safetyCheck.passed ? '✅' : '❌'})` : ''
+      }`,
       timestamp: new Date().toISOString()
     });
   };

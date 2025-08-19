@@ -189,15 +189,34 @@ export class OcppWebSocketServer {
     logger.info(`BootNotification from ${stationId}:`, payload);
     
     try {
-      // Update station info
-      sessions.updateStationInfo(stationId, {
+      // Update station info including location data
+      const stationInfo = {
         vendor: payload.chargePointVendor,
         model: payload.chargePointModel,
         firmware: payload.firmwareVersion,
         serialNumber: payload.chargePointSerialNumber,
         lastBootTime: getTimestamp()
-      });
-      logger.info(`✅ Updated station info for ${stationId}`);
+      };
+
+      // Add location information if provided
+      if (payload.stationName) {
+        stationInfo.stationName = payload.stationName;
+      }
+      if (payload.address) {
+        stationInfo.address = payload.address;
+      }
+      if (payload.latitude && payload.longitude) {
+        stationInfo.latitude = payload.latitude;
+        stationInfo.longitude = payload.longitude;
+      }
+
+      sessions.updateStationInfo(stationId, stationInfo);
+      
+      if (payload.latitude && payload.longitude) {
+        logger.info(`✅ Updated station info for ${stationId} with location: ${payload.stationName} at ${payload.address} (${payload.latitude}, ${payload.longitude})`);
+      } else {
+        logger.info(`✅ Updated station info for ${stationId}`);
+      }
 
       // Initialize persistent connectors using connector service
       try {
@@ -255,13 +274,26 @@ export class OcppWebSocketServer {
   handleStatusNotification(stationId, messageId, payload) {
     logger.info(`StatusNotification from ${stationId}:`, payload);
     
-    // Update connector status
-    sessions.updateConnectorStatus(stationId, payload.connectorId, {
+    // Prepare connector status data for sessions
+    const statusData = {
       status: payload.status,
       errorCode: payload.errorCode,
       timestamp: payload.timestamp || getTimestamp(),
       info: payload.info
-    });
+    };
+
+    // Include safety check data if present (for Preparing status)
+    if (payload.safetyCheck) {
+      statusData.safetyCheck = payload.safetyCheck;
+      logger.info(`🔒 Safety check data received for ${stationId}/${payload.connectorId}:`, payload.safetyCheck);
+    }
+
+    // Include any additional metadata from simulator
+    if (payload.Wh_total !== undefined) statusData.Wh_total = payload.Wh_total;
+    if (payload.W_now !== undefined) statusData.W_now = payload.W_now;
+    
+    // Update connector status in sessions (which will update Firebase)
+    sessions.updateConnectorStatus(stationId, payload.connectorId, statusData);
 
     this.sendCallResult(stationId, messageId, {});
   }

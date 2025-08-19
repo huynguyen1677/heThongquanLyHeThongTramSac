@@ -81,24 +81,57 @@ const ConnectorCard = ({
     };
   }, [status, meterTimer]); // Thêm `status` vào dependency array
 
-  const handlePreCheckChange = (field, value) => {
-    setPreCheck(prev => ({
-      ...prev,
-      [field]: value
-    }));
+  const handlePreCheckChange = async (field, value) => {
+    const newPreCheck = { ...preCheck, [field]: value };
+    setPreCheck(newPreCheck);
+    
+    // Kiểm tra xem tất cả safety check đã hoàn thành chưa (trừ confirmed vì nó cần mã xác nhận)
+    if (field !== 'confirmationCode' && field !== 'confirmed' && 
+        newPreCheck.parked && newPreCheck.plugged && newPreCheck.confirmed && 
+        status === 'Available') {
+      try {
+        console.log(`🔒 All safety checks completed for connector ${connectorId}:`, newPreCheck);
+        
+        // Ngay lập tức chuyển sang Preparing và gửi qua CSMS
+        await onStatusChange(connectorId, 'Preparing', newPreCheck);
+        
+        console.log(`✅ Connector ${connectorId} moved to Preparing status`);
+      } catch (error) {
+        console.error(`❌ Error updating status to Preparing:`, error);
+        alert(`Lỗi khi cập nhật trạng thái: ${error.message}`);
+      }
+    }
   };
 
-  const handleConfirmCode = () => {
+  const handleConfirmCode = async () => {
     if (preCheck.confirmationCode === '1234') {
-      setPreCheck(prev => ({ ...prev, confirmed: true }));
+      const newPreCheck = { ...preCheck, confirmed: true };
+      setPreCheck(newPreCheck);
+      
+      // Kiểm tra xem tất cả safety check đã hoàn thành chưa
+      if (newPreCheck.parked && newPreCheck.plugged && newPreCheck.confirmed && status === 'Available') {
+        try {
+          console.log(`🔒 All safety checks completed for connector ${connectorId}:`, newPreCheck);
+          
+          // Ngay lập tức chuyển sang Preparing và gửi qua CSMS
+          await onStatusChange(connectorId, 'Preparing', newPreCheck);
+          
+          console.log(`✅ Connector ${connectorId} moved to Preparing status`);
+        } catch (error) {
+          console.error(`❌ Error updating status to Preparing:`, error);
+          alert(`Lỗi khi cập nhật trạng thái: ${error.message}`);
+        }
+      }
     } else {
       alert('Mã xác nhận không đúng! Sử dụng: 1234');
     }
   };
 
   const isReadyToStart = () => {
-    return preCheck.parked && preCheck.plugged && preCheck.confirmed &&
-      status === 'Available' && isConnected;
+    // Có thể bắt đầu sạc khi ở trạng thái Preparing (đã qua safety check) hoặc Available (với đầy đủ safety check)
+    return ((status === 'Preparing') || 
+            (status === 'Available' && preCheck.parked && preCheck.plugged && preCheck.confirmed)) &&
+           isConnected;
   };
 
   const canStop = () => {
@@ -112,8 +145,22 @@ const ConnectorCard = ({
     }
 
     try {
+      console.log(`� Starting charging process for connector ${connectorId} (current status: ${status})`);
+      
+      // Nếu chưa ở trạng thái Preparing, chuyển sang Preparing trước
+      if (status === 'Available') {
+        console.log(`🔒 Moving to Preparing status first...`);
+        await onStatusChange(connectorId, 'Preparing', preCheck);
+        // Delay ngắn để mô phỏng quá trình chuẩn bị
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      
+      // Bắt đầu quá trình sạc - CSMS sẽ nhận và cập nhật Firebase
       await onLocalStart(connectorId, powerKw);
+      
+      console.log(`✅ Charging process initiated for connector ${connectorId}`);
     } catch (error) {
+      console.error(`❌ Error starting charge for connector ${connectorId}:`, error);
       alert(`Lỗi khi bắt đầu sạc: ${error.message}`);
     }
   };
@@ -139,6 +186,16 @@ const ConnectorCard = ({
 
   const handleStatusAction = async (newStatus) => {
     try {
+      // Nếu chuyển sang Available từ trạng thái khác, reset safety check
+      if (newStatus === 'Available') {
+        setPreCheck({
+          parked: false,
+          plugged: false,
+          confirmationCode: '',
+          confirmed: false
+        });
+      }
+      
       await onStatusChange(connectorId, newStatus);
     } catch (error) {
       alert(`Lỗi khi thay đổi trạng thái: ${error.message}`);
