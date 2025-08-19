@@ -13,12 +13,7 @@ const ConnectionPanel = ({
     connectorCount: 2,
     vendor: 'SIM',
     model: 'SIM-X',
-    firmwareVersion: '1.0.0',
-    // Location data
-    latitude: '',
-    longitude: '',
-    address: '',
-    stationName: ''
+    firmwareVersion: '1.0.0'
   });
 
   const [isConnecting, setIsConnecting] = useState(false);
@@ -39,37 +34,9 @@ const ConnectionPanel = ({
       return;
     }
 
-    // Validate location data
-    if (!formData.latitude || !formData.longitude || !formData.address || !formData.stationName) {
-      alert('Vui lòng nhập đầy đủ thông tin vị trí (Latitude, Longitude, Địa chỉ, Tên trạm)');
-      return;
-    }
-
-    const lat = parseFloat(formData.latitude);
-    const lng = parseFloat(formData.longitude);
-    
-    if (isNaN(lat) || isNaN(lng)) {
-      alert('Latitude và Longitude phải là số hợp lệ');
-      return;
-    }
-
-    if (lat < -90 || lat > 90) {
-      alert('Latitude phải trong khoảng -90 đến 90');
-      return;
-    }
-
-    if (lng < -180 || lng > 180) {
-      alert('Longitude phải trong khoảng -180 đến 180');
-      return;
-    }
-
     setIsConnecting(true);
     try {
-      await onConnect({
-        ...formData,
-        latitude: lat,
-        longitude: lng
-      });
+      await onConnect(formData);
     } catch (error) {
       alert(`Kết nối thất bại: ${error.message}`);
     } finally {
@@ -179,97 +146,6 @@ const ConnectionPanel = ({
               onChange={handleInputChange}
               disabled={isConnected}
             />
-          </div>
-        </div>
-
-        {/* Location Information */}
-        <div className="location-section">
-          <h3 style={{margin: '20px 0 10px 0', color: '#2563eb', borderBottom: '2px solid #e5e7eb', paddingBottom: '5px'}}>
-            📍 Thông tin vị trí trạm sạc
-          </h3>
-          
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="stationName">Tên trạm sạc *</label>
-              <input
-                type="text"
-                id="stationName"
-                name="stationName"
-                value={formData.stationName}
-                onChange={handleInputChange}
-                disabled={isConnected}
-                placeholder="VD: Trạm sạc Vincom Center"
-              />
-            </div>
-            
-            <div className="form-group">
-              <label htmlFor="address">Địa chỉ *</label>
-              <input
-                type="text"
-                id="address"
-                name="address"
-                value={formData.address}
-                onChange={handleInputChange}
-                disabled={isConnected}
-                placeholder="VD: 72 Lê Thánh Tôn, Quận 1, TP.HCM"
-              />
-            </div>
-          </div>
-
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="latitude">Latitude (Vĩ độ) *</label>
-              <input
-                type="number"
-                id="latitude"
-                name="latitude"
-                value={formData.latitude}
-                onChange={handleInputChange}
-                disabled={isConnected}
-                placeholder="VD: 10.7769"
-                step="any"
-                min="-90"
-                max="90"
-              />
-              <small style={{color: '#6b7280', fontSize: '11px'}}>
-                Từ -90 đến 90 (Google Maps: click chuột phải → "What's here?")
-              </small>
-            </div>
-            
-            <div className="form-group">
-              <label htmlFor="longitude">Longitude (Kinh độ) *</label>
-              <input
-                type="number"
-                id="longitude"
-                name="longitude"
-                value={formData.longitude}
-                onChange={handleInputChange}
-                disabled={isConnected}
-                placeholder="VD: 106.7009"
-                step="any"
-                min="-180"
-                max="180"
-              />
-              <small style={{color: '#6b7280', fontSize: '11px'}}>
-                Từ -180 đến 180
-              </small>
-            </div>
-          </div>
-
-          <div className="location-helper" style={{
-            background: '#f3f4f6', 
-            padding: '12px', 
-            borderRadius: '8px', 
-            marginTop: '10px',
-            border: '1px solid #e5e7eb'
-          }}>
-            <strong style={{color: '#374151'}}>💡 Cách lấy tọa độ từ Google Maps:</strong>
-            <ol style={{margin: '8px 0 0 20px', color: '#6b7280', fontSize: '12px'}}>
-              <li>Mở <a href="https://maps.google.com" target="_blank" style={{color: '#2563eb'}}>Google Maps</a></li>
-              <li>Tìm địa chỉ trạm sạc</li>
-              <li>Click chuột phải vào vị trí → chọn "What's here?"</li>
-              <li>Copy số đầu tiên (Latitude) và số thứ hai (Longitude)</li>
-            </ol>
           </div>
         </div>
 
