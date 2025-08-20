@@ -35,8 +35,9 @@ class FirestoreService {
       logger.debug(`Station saved to Firestore: ${stationData.id}`);
       return data;
     } catch (error) {
-      logger.error('Error saving station to Firestore:', error);
-      return null;
+      // Log the full error object for better debugging
+      logger.error({ err: error }, `Error saving station ${stationData.id} to Firestore`);
+      throw error; // Re-throw the error so the caller can handle it
     }
   }
 

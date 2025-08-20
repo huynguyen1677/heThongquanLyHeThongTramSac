@@ -58,31 +58,37 @@ export class RealtimeService {
       // 2. Duyệt qua từng trạm sạc trong realtime
       for (const [stationId, realtimeData] of Object.entries(realtimeStations)) {
         try {
+          // Chỉ đồng bộ các trạm thuộc về owner này
+          if (realtimeData.ownerId !== ownerId) {
+            // Bỏ qua các trạm không thuộc về owner hiện tại
+            continue;
+          }
+
           // Kiểm tra xem trạm đã tồn tại trong Firestore chưa
           const existingStation = await FirestoreService.checkStationExists(stationId);
-          
+
           if (existingStation) {
             console.log(`⏭️ Station ${stationId} already exists in Firestore, skipping...`);
             skippedCount++;
             continue;
           }
 
-          // Tạo document mới cho Firestore với thông tin bổ sung
+          // Tạo document mới cho Firestore với thông tin từ Realtime DB
           const firestoreData = {
             stationId: stationId,
-            ownerId: ownerId,
-            
+            ownerId: realtimeData.ownerId, // Sử dụng ownerId từ dữ liệu realtime
+
             // Thông tin cơ bản từ realtime (nếu có)
             vendor: realtimeData.vendor || 'Unknown',
             model: realtimeData.model || 'Unknown',
-            firmwareVersion: realtimeData.firmwareVersion || '1.0.0',
-            
+            firmwareVersion: realtimeData.firmwareVersion || 'N/A',
+
             // Thông tin bổ sung cho app driver
-            stationName: `Trạm sạc ${stationId}`, // Tên mặc định
-            address: '', // Để trống, admin sẽ điền sau
-            latitude: null,
-            longitude: null,
-            
+            stationName: realtimeData.stationName || `Trạm sạc ${stationId}`,
+            address: realtimeData.address || '',
+            latitude: realtimeData.latitude || null,
+            longitude: realtimeData.longitude || null,
+
             // Thông tin trạng thái
             status: realtimeData.online ? 'online' : 'offline',
             lastHeartbeat: realtimeData.lastHeartbeat || null,
