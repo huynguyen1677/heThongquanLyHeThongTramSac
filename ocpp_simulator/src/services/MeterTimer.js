@@ -200,7 +200,7 @@ export class MeterTimer {
     let currentPowerKw = this.calculateCurrentPowerKw(chargingTimeMinutes);
 
     // 2. Tính toán lượng điện năng tiêu thụ trong chu kỳ vừa qua
-    const deltaTimeHours = this.interval / (1000 * 3600); // Đổi mili-giây sang giờ
+    const deltaTimeHours = this.interval / (1000 * 60 * 60); // Đổi mili-giây sang giờ
     const deltaWh = currentPowerKw * 1000 * deltaTimeHours; // Đổi kW sang W, rồi tính Wh 
 
     // 3. Cập nhật tổng giá trị meter

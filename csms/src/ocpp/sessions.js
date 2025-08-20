@@ -259,7 +259,7 @@ class SessionManager {
   }
 
   // Transaction management
-  startTransaction(stationId, connectorId, transactionData) {
+  async startTransaction(stationId, connectorId, transactionData) {
     const station = this.stations.get(stationId);
     const connector = this.ensureConnector(stationId, connectorId);
     
@@ -298,8 +298,8 @@ class SessionManager {
     connector.status = CONNECTOR_STATUS.CHARGING;
 
     // Cập nhật transaction ID trong realtime
-    realtimeService.updateConnectorTransaction(stationId, connectorId, transaction.id);
-    realtimeService.updateConnectorStatus(stationId, connectorId, {
+    await realtimeService.updateConnectorTransaction(stationId, connectorId, transaction.id, transactionData.meterStart);
+    await realtimeService.updateConnectorStatus(stationId, connectorId, {
       status: CONNECTOR_STATUS.CHARGING,
       errorCode: 'NoError',
       txId: transaction.id
@@ -309,7 +309,7 @@ class SessionManager {
     return transaction;
   }
 
-  stopTransaction(stationId, transactionId, stopData) {
+  async stopTransaction(stationId, transactionId, stopData) {
     const transaction = this.transactions.get(transactionId);
     if (!transaction) {
       logger.error(`Transaction not found: ${transactionId}`);
@@ -340,9 +340,10 @@ class SessionManager {
     station.transactions.delete(transactionId);
     connector.currentTransaction = null;
     connector.status = CONNECTOR_STATUS.AVAILABLE;
-
-    // Cập nhật realtime - clear transaction và status
-    realtimeService.updateConnectorStatus(stationId, transaction.connectorId, {
+ 
+    // Cập nhật realtime - clear transaction ID và reset session data
+    await realtimeService.updateConnectorTransaction(stationId, transaction.connectorId, null);
+    await realtimeService.updateConnectorStatus(stationId, transaction.connectorId, {
       status: CONNECTOR_STATUS.AVAILABLE,
       errorCode: 'NoError',
       txId: null,

@@ -164,10 +164,10 @@ export class OcppWebSocketServer {
         this.handleAuthorize(stationId, messageId, payload);
         break;
       case 'StartTransaction':
-        this.handleStartTransaction(stationId, messageId, payload);
+        await this.handleStartTransaction(stationId, messageId, payload);
         break;
       case 'StopTransaction':
-        this.handleStopTransaction(stationId, messageId, payload);
+        await this.handleStopTransaction(stationId, messageId, payload);
         break;
       case 'MeterValues':
         this.handleMeterValues(stationId, messageId, payload);
@@ -338,14 +338,14 @@ export class OcppWebSocketServer {
     this.sendCallResult(stationId, messageId, response);
   }
 
-  handleStartTransaction(stationId, messageId, payload) {
+  async handleStartTransaction(stationId, messageId, payload) {
     logger.info(`StartTransaction from ${stationId}:`, payload);
     
     // Generate transaction ID
     const transactionId = Date.now();
     
     // Update session
-    sessions.startTransaction(stationId, payload.connectorId, {
+    await sessions.startTransaction(stationId, payload.connectorId, {
       transactionId,
       idTag: payload.idTag,
       meterStart: payload.meterStart,
@@ -363,11 +363,11 @@ export class OcppWebSocketServer {
     this.sendCallResult(stationId, messageId, response);
   }
 
-  handleStopTransaction(stationId, messageId, payload) {
+  async handleStopTransaction(stationId, messageId, payload) {
     logger.info(`StopTransaction from ${stationId}:`, payload);
     
     // Update session
-    sessions.stopTransaction(stationId, payload.transactionId, {
+    await sessions.stopTransaction(stationId, payload.transactionId, {
       meterStop: payload.meterStop,
       stopTime: payload.timestamp,
       reason: payload.reason,
