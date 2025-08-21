@@ -1,18 +1,25 @@
-import { useParams, Link } from 'react-router-dom'
+import { useParams, useLocation, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { firestoreService } from '../services/firestore'
 import { formatCurrency, formatEnergy, formatDuration } from '../utils/format'
 
 export default function Receipt() {
   const { txId } = useParams()
+  const location = useLocation()
+  
+  // Try to get session data from navigation state first
+  const sessionFromState = location.state?.session
 
   const { data: transaction, isLoading, error } = useQuery({
     queryKey: ['transaction', txId],
     queryFn: () => firestoreService.getTransactionById(txId),
-    enabled: !!txId
+    enabled: !!txId && !sessionFromState // Only fetch if we don't have session data from state
   })
 
-  if (isLoading) {
+  // Use session data from state if available, otherwise use transaction from query
+  const receiptData = sessionFromState || transaction
+
+  if (!sessionFromState && isLoading) {
     return (
       <div className="space-y-6">
         <div className="card">
@@ -26,7 +33,7 @@ export default function Receipt() {
     )
   }
 
-  if (error || !transaction) {
+  if (error || !receiptData) {
     return (
       <div className="card text-center">
         <div className="text-4xl mb-4">❌</div>
@@ -43,22 +50,41 @@ export default function Receipt() {
     )
   }
 
-  const startTime = transaction.startTs?.toDate ? transaction.startTs.toDate() : new Date(transaction.startTs)
-  const stopTime = transaction.stopTs?.toDate ? transaction.stopTs.toDate() : new Date(transaction.stopTs)
-  const duration = stopTime - startTime
+  // Handle different data formats for backward compatibility
+  const startTime = receiptData.startTime 
+    ? new Date(receiptData.startTime)
+    : receiptData.startTs?.toDate 
+    ? receiptData.startTs.toDate() 
+    : new Date(receiptData.startTs)
+    
+  const stopTime = receiptData.stopTime 
+    ? new Date(receiptData.stopTime)
+    : receiptData.stopTs?.toDate 
+    ? receiptData.stopTs.toDate() 
+    : new Date(receiptData.stopTs)
+    
+  const duration = receiptData.duration 
+    ? receiptData.duration * 1000 // Convert seconds to milliseconds
+    : stopTime - startTime
+
+  const energyKwh = receiptData.energyConsumed 
+    ? receiptData.energyConsumed / 1000 // Convert Wh to kWh
+    : receiptData.energyKwh || 0
+
+  const totalCost = receiptData.estimatedCost || receiptData.amountVnd || 0
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="card text-center">
         <div className="text-4xl mb-3">
-          {transaction.status === 'completed' ? '✅' : '⏳'}
+          {receiptData.status === 'completed' ? '✅' : receiptData.status === 'active' ? '⚡' : '⏳'}
         </div>
         <h1 className="text-2xl font-bold text-gray-900 mb-2">
           Hóa đơn sạc điện
         </h1>
         <p className="text-gray-600">
-          Transaction ID: <span className="font-mono">{txId}</span>
+          Session ID: <span className="font-mono">{receiptData.id || receiptData.txId || txId}</span>
         </p>
       </div>
 
@@ -67,15 +93,16 @@ export default function Receipt() {
         <div className="flex items-center justify-between">
           <span className="font-medium text-gray-700">Trạng thái:</span>
           <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-            transaction.status === 'completed'
+            receiptData.status === 'completed'
               ? 'bg-green-100 text-green-800'
-              : transaction.status === 'failed'
+              : receiptData.status === 'cancelled' || receiptData.status === 'error'
               ? 'bg-red-100 text-red-800'
-              : 'bg-yellow-100 text-yellow-800'
+              : 'bg-blue-100 text-blue-800'
           }`}>
-            {transaction.status === 'completed' && '✅ Hoàn thành'}
-            {transaction.status === 'failed' && '❌ Thất bại'}
-            {transaction.status === 'processing' && '⏳ Đang xử lý'}
+            {receiptData.status === 'completed' && '✅ Hoàn thành'}
+            {receiptData.status === 'cancelled' && '❌ Đã hủy'}
+            {receiptData.status === 'error' && '❌ Lỗi'}
+            {receiptData.status === 'active' && '⚡ Đang sạc'}
           </span>
         </div>
       </div>
@@ -86,16 +113,23 @@ export default function Receipt() {
           Thông tin trạm sạc
         </h3>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-          <div>
-            <span className="font-medium text-gray-700">Mã trạm:</span>
-            <span className="ml-2 text-gray-600">{transaction.stationId}</span>
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between">
+            <span className="font-medium text-gray-700">Tên trạm:</span>
+            <span className="text-gray-600">{receiptData.stationName || receiptData.stationId}</span>
           </div>
           
-          <div>
+          <div className="flex justify-between">
             <span className="font-medium text-gray-700">Connector:</span>
-            <span className="ml-2 text-gray-600">{transaction.connectorId}</span>
+            <span className="text-gray-600">{receiptData.connectorId}</span>
           </div>
+
+          {receiptData.stationInfo?.address && (
+            <div className="flex justify-between">
+              <span className="font-medium text-gray-700">Địa chỉ:</span>
+              <span className="text-gray-600">{receiptData.stationInfo.address}</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -116,7 +150,7 @@ export default function Receipt() {
           <div className="flex justify-between">
             <span className="font-medium text-gray-700">Kết thúc:</span>
             <span className="text-gray-600">
-              {stopTime.toLocaleString('vi-VN')}
+              {stopTime ? stopTime.toLocaleString('vi-VN') : 'Đang sạc...'}
             </span>
           </div>
           
@@ -139,28 +173,28 @@ export default function Receipt() {
           <div className="flex justify-between items-center">
             <span className="font-medium text-gray-700">Năng lượng sạc:</span>
             <span className="text-xl font-bold text-blue-600">
-              {formatEnergy(transaction.energyKwh || 0)}
+              {formatEnergy(energyKwh)}
             </span>
           </div>
           
           <div className="flex justify-between items-center">
             <span className="font-medium text-gray-700">Giá điện:</span>
             <span className="text-gray-600">
-              {formatCurrency(transaction.pricePerKwh || 3500)}/kWh
+              {formatCurrency(receiptData.pricePerKwh || 3500)}/kWh
             </span>
           </div>
           
           <div className="border-t pt-3 flex justify-between items-center">
             <span className="text-lg font-semibold text-gray-900">Tổng tiền:</span>
             <span className="text-2xl font-bold text-green-600">
-              {formatCurrency(transaction.amountVnd || 0)}
+              {formatCurrency(totalCost)}
             </span>
           </div>
         </div>
       </div>
 
       {/* Meter Values */}
-      {(transaction.meterStart !== undefined && transaction.meterStop !== undefined) && (
+      {(receiptData.meterStart !== undefined && receiptData.meterStop !== undefined) && (
         <div className="card">
           <h3 className="text-lg font-semibold text-gray-900 mb-3">
             Số đo công tơ
@@ -170,14 +204,14 @@ export default function Receipt() {
             <div className="text-center p-3 bg-gray-50 rounded">
               <div className="font-medium text-gray-700">Số đầu</div>
               <div className="text-lg font-bold text-gray-900">
-                {formatEnergy(transaction.meterStart / 1000)} {/* Convert Wh to kWh */}
+                {formatEnergy(receiptData.meterStart / 1000)} {/* Convert Wh to kWh */}
               </div>
             </div>
             
             <div className="text-center p-3 bg-gray-50 rounded">
               <div className="font-medium text-gray-700">Số cuối</div>
               <div className="text-lg font-bold text-gray-900">
-                {formatEnergy(transaction.meterStop / 1000)} {/* Convert Wh to kWh */}
+                {formatEnergy(receiptData.meterStop / 1000)} {/* Convert Wh to kWh */}
               </div>
             </div>
           </div>
@@ -193,7 +227,7 @@ export default function Receipt() {
         <div className="text-sm">
           <div className="flex justify-between">
             <span className="font-medium text-gray-700">User ID:</span>
-            <span className="text-gray-600 font-mono">{transaction.userId}</span>
+            <span className="text-gray-600 font-mono">{receiptData.userId}</span>
           </div>
         </div>
       </div>

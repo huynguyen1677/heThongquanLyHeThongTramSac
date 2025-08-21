@@ -1,6 +1,7 @@
 import { logger } from '../utils/logger.js';
 import { getTimestamp } from '../utils/time.js';
 import { realtimeService } from '../services/realtime.js';
+import { firestoreService } from '../services/firestore.js';
 import { CONNECTOR_STATUS, TRANSACTION_STATUS } from '../domain/constants.js';
 
 class SessionManager {
@@ -305,6 +306,36 @@ class SessionManager {
       txId: transaction.id
     });
 
+    // Lưu charging session vào Firestore
+    try {
+      const chargingSessionData = {
+        id: transaction.id,
+        stationId: transaction.stationId,
+        connectorId: transaction.connectorId,
+        userId: transaction.idTag, // Sử dụng idTag làm userId tạm thời
+        ownerId: station.info.ownerId,
+        stationName: station.info.stationName || stationId,
+        startTime: transaction.startTime,
+        meterStart: transaction.meterStart,
+        status: 'active',
+        meterValues: [],
+        // Thông tin trạm sạc
+        stationInfo: {
+          vendor: station.info.vendor,
+          model: station.info.model,
+          address: station.info.address,
+          latitude: station.info.latitude,
+          longitude: station.info.longitude
+        }
+      };
+      
+      await firestoreService.saveChargingSession(chargingSessionData);
+      logger.info(`Charging session saved to Firestore: ${transaction.id}`);
+    } catch (error) {
+      logger.error(`Failed to save charging session to Firestore: ${error.message}`);
+      // Không throw error để không làm gián đoạn transaction
+    }
+
     logger.info(`Transaction started: ${transaction.id} on ${stationId}/${connectorId}`);
     return transaction;
   }
@@ -351,8 +382,43 @@ class SessionManager {
       W_now: 0
     });
 
+    // Cập nhật charging session trong Firestore khi hoàn thành
+    try {
+      const updateData = {
+        meterStop: transaction.meterStop,
+        stopTime: transaction.stopTime,
+        reason: transaction.reason,
+        status: 'completed',
+        duration: transaction.duration,
+        energyConsumed: transaction.energyConsumed,
+        // Tính toán chi phí ước tính
+        estimatedCost: await this.calculateSessionCost(transaction)
+      };
+      
+      await firestoreService.updateChargingSession(transaction.id, updateData);
+      logger.info(`Charging session completed and updated in Firestore: ${transaction.id}`);
+    } catch (error) {
+      logger.error(`Failed to update charging session in Firestore: ${error.message}`);
+      // Không throw error để không làm gián đoạn transaction
+    }
+
     logger.info(`Transaction stopped: ${transactionId} on ${stationId}/${transaction.connectorId}`);
     return transaction;
+  }
+
+  // Tính toán chi phí cho session
+  async calculateSessionCost(transaction) {
+    try {
+      const pricePerKwh = await firestoreService.getPricePerKwh();
+      if (pricePerKwh && transaction.energyConsumed > 0) {
+        const energyInKwh = transaction.energyConsumed / 1000; // Convert Wh to kWh
+        return Math.round(energyInKwh * pricePerKwh);
+      }
+      return 0;
+    } catch (error) {
+      logger.error('Error calculating session cost:', error);
+      return 0;
+    }
   }
 
   forceStopTransaction(transactionId, reason = 'Other') {
@@ -446,6 +512,24 @@ class SessionManager {
         // Update energy consumed from latest meter value
         if (Wh_total > 0) {
           transaction.energyConsumed = Wh_total - transaction.meterStart;
+        }
+
+        // Lưu meter values quan trọng vào Firestore (mỗi 10 lần hoặc meter value cuối cùng)
+        try {
+          // Chỉ lưu mỗi 10 meter values để tránh quá tải
+          if (transaction.meterValues.length % 10 === 0) {
+            const meterValueData = {
+              timestamp: meterValues[meterValues.length - 1]?.timestamp || new Date().toISOString(),
+              energyWh: Wh_total,
+              powerW: W_now,
+              energyConsumed: transaction.energyConsumed
+            };
+            
+            firestoreService.addMeterValueToSession(transactionId, meterValueData)
+              .catch(error => logger.error(`Failed to save meter value to Firestore: ${error.message}`));
+          }
+        } catch (error) {
+          logger.error('Error processing meter value for Firestore:', error);
         }
       }
     }

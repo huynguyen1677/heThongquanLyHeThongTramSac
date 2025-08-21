@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import LoginForm from './components/LoginForm';
 import Header from './components/Header';
 import StationList from './components/StationList';
+import ChargingSessionsList from './components/ChargingSessionsList';
 import RealtimeService from './services/realtime';
 import AuthService from './services/auth';
 
@@ -9,6 +10,7 @@ function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('stations');
 
   useEffect(() => {
     const unsubscribe = AuthService.onAuthStateChanged((user) => {
@@ -86,9 +88,51 @@ function App() {
         onSyncData={handleSyncData}
       />
       
-      <main style={{ maxWidth: '1200px', margin: '0 auto' }}>
-        <StationList ownerId={currentUser.ownerId} />
-      </main>
+      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '1rem' }}>
+        {/* Navigation Tabs */}
+        <div style={{ borderBottom: '1px solid #e5e7eb', marginBottom: '2rem' }}>
+          <nav style={{ display: 'flex', gap: '2rem' }}>
+            <button
+              onClick={() => setActiveTab('stations')}
+              style={{
+                padding: '0.75rem 0',
+                color: activeTab === 'stations' ? '#2563eb' : '#6b7280',
+                borderBottom: activeTab === 'stations' ? '2px solid #2563eb' : '2px solid transparent',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                fontWeight: activeTab === 'stations' ? '600' : '400'
+              }}
+            >
+              Quản lý trạm sạc
+            </button>
+            <button
+              onClick={() => setActiveTab('sessions')}
+              style={{
+                padding: '0.75rem 0',
+                color: activeTab === 'sessions' ? '#2563eb' : '#6b7280',
+                borderBottom: activeTab === 'sessions' ? '2px solid #2563eb' : '2px solid transparent',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                fontWeight: activeTab === 'sessions' ? '600' : '400'
+              }}
+            >
+              Lịch sử phiên sạc
+            </button>
+          </nav>
+        </div>
+
+        {/* Tab Content */}
+        <main>
+          {activeTab === 'stations' && (
+            <StationList ownerId={currentUser.ownerId} />
+          )}
+          {activeTab === 'sessions' && (
+            <ChargingSessionsList ownerId={currentUser.ownerId} />
+          )}
+        </main>
+      </div>
 
       {isLoading && (
         <div style={{

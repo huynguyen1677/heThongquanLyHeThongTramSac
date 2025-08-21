@@ -197,7 +197,8 @@ const ConnectorCard = ({
     }
 
     try {
-      console.log(`🚗 Suspending charging due to EV request for connector ${connectorId}`);
+      console.log(`� [DEBUG] handleSuspendEV called for connector ${connectorId}, onStatusChange:`, typeof onStatusChange);
+      console.log(`�🚗 Suspending charging due to EV request for connector ${connectorId}`);
       await onStatusChange(connectorId, 'SuspendedEV');
     } catch (error) {
       alert(`Lỗi khi tạm dừng sạc (EV): ${error.message}`);
@@ -210,6 +211,7 @@ const ConnectorCard = ({
     }
 
     try {
+      console.log(`🔍 [DEBUG] handleSuspendEVSE called for connector ${connectorId}, onStatusChange:`, typeof onStatusChange);
       console.log(`⚡ Suspending charging due to EVSE limit for connector ${connectorId}`);
       await onStatusChange(connectorId, 'SuspendedEVSE');
     } catch (error) {

@@ -5,6 +5,7 @@ import ConnectionPanel from './components/ConnectionPanel';
 import ConnectorCard from './components/ConnectorCard';
 import SimulatorActions from './components/SimulatorActions';
 import LogConsole from './components/LogConsole';
+import ChargingHistory from './components/ChargingHistory';
 import './App.css';
 
 function App() {
@@ -16,6 +17,7 @@ function App() {
   const [meterTimers, setMeterTimers] = useState(new Map());
   
   const ocppClientRef = useRef(null);
+  const chargingHistoryRefs = useRef(new Map());
 
   useEffect(() => {
     // Initialize OCPP client
@@ -326,6 +328,12 @@ function App() {
         meterStop = connector.meterStart + 1000; // Add minimum 1kWh
       }
 
+      // Get session statistics before stopping
+      const sessionStats = meterTimer ? meterTimer.getChargingStats() : {};
+      const sessionEndTime = new Date();
+      const sessionDuration = sessionStats.duration || 0; // Ensure we have a valid duration
+      const sessionStartTime = new Date(sessionEndTime.getTime() - sessionDuration * 1000);
+
       // Stop transaction
       const stopPayload = {
         transactionId: connector.transactionId,
@@ -336,8 +344,40 @@ function App() {
 
       await ocppClientRef.current.sendCall('StopTransaction', stopPayload);
 
-      // Send StatusNotification (Finishing)
+      // Send StatusNotification (Finishing) immediately
       await sendStatusNotification(connectorId, 'Finishing');
+
+      // Update local state to Finishing immediately
+      setConnectors(prev => prev.map(conn => 
+        conn.id === connectorId 
+          ? { ...conn, status: 'Finishing' }
+          : conn
+      ));
+
+      // Prepare session summary data
+      const sessionSummaryData = {
+        id: `session_${Date.now()}_${connectorId}`,
+        transactionId: connector.transactionId,
+        connectorId: connectorId,
+        userId: 'DEMO_USER',
+        stationId: stationConfig?.id || 'UNKNOWN',
+        startTime: sessionStartTime.getTime(), // Use timestamp instead of ISO string
+        endTime: sessionEndTime.getTime(), // Use timestamp instead of ISO string
+        duration: sessionDuration,
+        meterStart: connector.meterStart || 0,
+        meterStop: meterStop,
+        energyConsumed: meterStop - (connector.meterStart || 0),
+        pricePerKwh: sessionStats.pricePerKwh || 0,
+        estimatedCost: sessionStats.estimatedCost || 0,
+        status: 'completed',
+        reason: 'Local stop requested'
+      };
+
+      // Save session to history instead of showing modal
+      const historyRef = chargingHistoryRefs.current.get(connectorId);
+      if (historyRef && historyRef.addSession) {
+        historyRef.addSession(sessionSummaryData);
+      }
 
       // Short delay then back to Available
       setTimeout(async () => {
@@ -350,7 +390,8 @@ function App() {
                 ...conn, 
                 transactionId: null, 
                 meterStart: 0,
-                cumulativeMeter: meterStop // Lưu giá trị meter cuối để dùng cho session tiếp theo
+                cumulativeMeter: meterStop, // Lưu giá trị meter cuối để dùng cho session tiếp theo
+                status: 'Available' // Ensure status is updated here too
               }
             : conn
         ));
@@ -391,9 +432,12 @@ function App() {
 
     // Xử lý MeterTimer dựa trên trạng thái mới
     const connector = connectors.find(c => c.id === connectorId);
+    console.log(`🔍 [DEBUG] handleStatusChange: connectorId=${connectorId}, newStatus=${newStatus}, connector found:`, !!connector, connector?.meterTimer ? 'has meterTimer' : 'no meterTimer');
+    
     if (connector && connector.meterTimer) {
       if (newStatus === 'SuspendedEV' || newStatus === 'SuspendedEVSE') {
         // Tạm dừng MeterTimer khi suspend
+        console.log(`🔍 [DEBUG] About to call pause() for connector ${connectorId}`);
         connector.meterTimer.pause();
         addLog({
           type: 'log',
@@ -414,6 +458,13 @@ function App() {
     }
     
     await sendStatusNotification(connectorId, newStatus, 'NoError', additionalInfo);
+    
+    // Cập nhật state connector sau khi gửi StatusNotification thành công
+    setConnectors(prev => prev.map(c => 
+      c.id === connectorId 
+        ? { ...c, status: newStatus }
+        : c
+    ));
     
     addLog({
       type: 'log',
@@ -565,6 +616,19 @@ function App() {
                     />
                   ))}
             </div>
+          </div>
+          
+          {/* Charging History Section */}
+          <div className="charging-history-section">
+            {isConnected && connectors.length > 0 && connectors.map(connector => (
+              <ChargingHistory
+                key={`history-${connector.id}`}
+                connectorId={connector.id}
+                onSessionSelect={(ref) => {
+                  chargingHistoryRefs.current.set(connector.id, ref);
+                }}
+              />
+            ))}
           </div>
         </div>
 

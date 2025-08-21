@@ -1,40 +1,80 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { firestoreService } from '../services/firestore'
 import { auth } from '../services/firebase'
 import { formatCurrency, formatEnergy, formatDuration } from '../utils/format'
 
-export default function History() {
-  const [filter, setFilter] = useState('all') // all, completed, failed, processing
-  const [dateRange, setDateRange] = useState('30days') // 7days, 30days, 90days, all
-
-  const { data: transactions = [], isLoading, error } = useQuery({
-    queryKey: ['transactionHistory', auth.currentUser?.uid, dateRange],
-    queryFn: async () => {
-      if (!auth.currentUser?.uid) return [];
-      try {
-        const daysBack = dateRange === '7days' ? 7 : dateRange === '30days' ? 30 : dateRange === '90days' ? 90 : null;
-        return await firestoreService.getTransactionHistory(auth.currentUser.uid, null, daysBack);
-      } catch (error) {
-        console.warn('Failed to load transaction history:', error);
-        return []; // Return empty array on error
+// CSMS API Service for fetching charging sessions
+const CSMSApiService = {
+  async getChargingSessionsByUser(userId) {
+    try {
+      const response = await fetch(`http://localhost:3001/api/charging-sessions/user/${userId}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-    },
-    enabled: !!auth.currentUser?.uid,
-    retry: false // Don't retry on permission errors
-  })
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching user charging sessions:', error);
+      throw error;
+    }
+  }
+};
 
-  const filteredTransactions = transactions.filter(tx => {
+export default function History() {
+  const [filter, setFilter] = useState('all') // all, completed, cancelled, active
+  const [dateRange, setDateRange] = useState('30days') // 7days, 30days, 90days, all
+  const [sessions, setSessions] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  // Get current user ID (you might need to adjust this based on your auth system)
+  const userId = auth.currentUser?.uid || localStorage.getItem('userId') || 'user123';
+
+  useEffect(() => {
+    const fetchSessions = async () => {
+      if (!userId) return;
+
+      try {
+        setIsLoading(true);
+        setError(null);
+        
+        // Fetch charging sessions from CSMS API
+        const sessionsData = await CSMSApiService.getChargingSessionsByUser(userId);
+        
+        // Filter by date range
+        const filteredByDate = sessionsData.filter(session => {
+          if (dateRange === 'all') return true;
+          
+          const sessionDate = new Date(session.startTime);
+          const now = new Date();
+          const daysBack = dateRange === '7days' ? 7 : dateRange === '30days' ? 30 : 90;
+          const cutoffDate = new Date(now.getTime() - (daysBack * 24 * 60 * 60 * 1000));
+          
+          return sessionDate >= cutoffDate;
+        });
+        
+        setSessions(filteredByDate);
+      } catch (err) {
+        console.error('Error fetching charging sessions:', err);
+        setError('Không thể tải lịch sử phiên sạc');
+        setSessions([]); // Set empty array on error
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchSessions();
+  }, [userId, dateRange]);
+
+  const filteredTransactions = sessions.filter(session => {
     if (filter === 'all') return true
-    return tx.status === filter
+    return session.status === filter
   })
 
   const stats = {
-    total: transactions.length,
-    completed: transactions.filter(tx => tx.status === 'completed').length,
-    totalEnergy: transactions.reduce((sum, tx) => sum + (tx.energyKwh || 0), 0),
-    totalAmount: transactions.reduce((sum, tx) => sum + (tx.amountVnd || 0), 0)
+    total: sessions.length,
+    completed: sessions.filter(session => session.status === 'completed').length,
+    totalEnergy: sessions.reduce((sum, session) => sum + ((session.energyConsumed || 0) / 1000), 0), // Convert Wh to kWh
+    totalAmount: sessions.reduce((sum, session) => sum + (session.estimatedCost || 0), 0)
   }
 
   return (
@@ -91,8 +131,9 @@ export default function History() {
             >
               <option value="all">Tất cả</option>
               <option value="completed">Hoàn thành</option>
-              <option value="processing">Đang xử lý</option>
-              <option value="failed">Thất bại</option>
+              <option value="active">Đang sạc</option>
+              <option value="cancelled">Đã hủy</option>
+              <option value="error">Lỗi</option>
             </select>
           </div>
 
@@ -131,33 +172,34 @@ export default function History() {
             ))}
           </div>
         ) : filteredTransactions.length > 0 ? (
-          filteredTransactions.map(tx => {
-            const startTime = tx.startTs?.toDate ? tx.startTs.toDate() : new Date(tx.startTs)
-            const stopTime = tx.stopTs?.toDate ? tx.stopTs.toDate() : new Date(tx.stopTs)
-            const duration = stopTime - startTime
+          filteredTransactions.map(session => {
+            const startTime = new Date(session.startTime)
+            const stopTime = session.stopTime ? new Date(session.stopTime) : null
+            const duration = session.duration || (stopTime && startTime ? (stopTime - startTime) / 1000 : 0)
 
             return (
               <Link
-                key={tx.id}
-                to={`/receipt/${tx.txId}`}
+                key={session.id}
+                to={`/receipt`}
+                state={{ session }}
                 className="card hover:shadow-lg transition-shadow block"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
                       <h3 className="font-semibold text-gray-900">
-                        {tx.stationId} - Connector {tx.connectorId}
+                        {session.stationName || session.stationId} - Connector {session.connectorId}
                       </h3>
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        tx.status === 'completed'
+                        session.status === 'completed'
                           ? 'bg-green-100 text-green-800'
-                          : tx.status === 'failed'
+                          : session.status === 'cancelled' || session.status === 'error'
                           ? 'bg-red-100 text-red-800'
-                          : 'bg-yellow-100 text-yellow-800'
+                          : 'bg-blue-100 text-blue-800'
                       }`}>
-                        {tx.status === 'completed' && '✅'}
-                        {tx.status === 'failed' && '❌'}
-                        {tx.status === 'processing' && '⏳'}
+                        {session.status === 'completed' && '✅'}
+                        {(session.status === 'cancelled' || session.status === 'error') && '❌'}
+                        {session.status === 'active' && '⚡'}
                       </span>
                     </div>
                     
@@ -171,23 +213,29 @@ export default function History() {
                       <div>
                         <span className="font-medium">Thời lượng:</span>
                         <br />
-                        {formatDuration(duration)}
+                        {formatDuration(duration * 1000)}
                       </div>
                       
                       <div>
                         <span className="font-medium">Năng lượng:</span>
                         <br />
-                        {formatEnergy(tx.energyKwh || 0)}
+                        {formatEnergy((session.energyConsumed || 0) / 1000)}
                       </div>
                       
                       <div>
                         <span className="font-medium">Thành tiền:</span>
                         <br />
                         <span className="font-semibold text-gray-900">
-                          {formatCurrency(tx.amountVnd || 0)}
+                          {formatCurrency(session.estimatedCost || 0)}
                         </span>
                       </div>
                     </div>
+
+                    {session.stationInfo?.address && (
+                      <div className="mt-2 text-sm text-gray-500">
+                        📍 {session.stationInfo.address}
+                      </div>
+                    )}
                   </div>
                   
                   <div className="text-gray-400 ml-4">
@@ -226,16 +274,16 @@ export default function History() {
           <div className="flex flex-wrap gap-3">
             <button
               onClick={() => {
-                // Tạo CSV export
-                const csvData = filteredTransactions.map(tx => ({
-                  'Transaction ID': tx.txId,
-                  'Trạm sạc': tx.stationId,
-                  'Connector': tx.connectorId,
-                  'Bắt đầu': new Date(tx.startTs?.toDate ? tx.startTs.toDate() : tx.startTs).toLocaleString('vi-VN'),
-                  'Kết thúc': new Date(tx.stopTs?.toDate ? tx.stopTs.toDate() : tx.stopTs).toLocaleString('vi-VN'),
-                  'Năng lượng (kWh)': tx.energyKwh,
-                  'Thành tiền (VND)': tx.amountVnd,
-                  'Trạng thái': tx.status
+                // Tạo CSV export từ charging sessions
+                const csvData = filteredTransactions.map(session => ({
+                  'Session ID': session.id,
+                  'Trạm sạc': session.stationName || session.stationId,
+                  'Connector': session.connectorId,
+                  'Bắt đầu': new Date(session.startTime).toLocaleString('vi-VN'),
+                  'Kết thúc': session.stopTime ? new Date(session.stopTime).toLocaleString('vi-VN') : 'N/A',
+                  'Năng lượng (kWh)': ((session.energyConsumed || 0) / 1000).toFixed(2),
+                  'Thành tiền (VND)': session.estimatedCost || 0,
+                  'Trạng thái': session.status
                 }))
                 
                 const csv = [

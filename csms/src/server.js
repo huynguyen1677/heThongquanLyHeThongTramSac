@@ -16,6 +16,7 @@ import transactionsRouter from './api/transactions.js';
 import systemRouter from './api/system.js';
 import connectorsRouter from './api/connectors.js';
 import settingsRouter from './api/settings.js';
+import chargingSessionsRouter from './api/chargingSessions.js';
 
 class CSMSServer {
   constructor() {
@@ -126,6 +127,7 @@ class CSMSServer {
     this.app.use('/api/system', systemRouter);
     this.app.use('/api/connectors', connectorsRouter);
     this.app.use('/api/settings', settingsRouter);
+    this.app.use('/api/charging-sessions', chargingSessionsRouter);
 
     // Sync endpoint
     this.app.post('/api/sync/stations', async (req, res) => {

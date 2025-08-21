@@ -21,6 +21,8 @@ export class MeterTimer {
     this.currentMeterValue = 0; // Giá trị meter hiện tại (tính bằng Wh)
     this.powerKw = 11; // Công suất sạc mặc định (kW)
     this.startTime = null; // Thời điểm bắt đầu sạc
+    this.pausedTime = 0; // Tổng thời gian đã pause (ms)
+    this.pauseStartTime = null; // Thời điểm bắt đầu pause
     this.pricePerKwh = null; // Giá điện sẽ được cập nhật động
   }
 
@@ -89,6 +91,10 @@ export class MeterTimer {
     }
     this.isRunning = false;
     
+    // Reset pause tracking
+    this.pausedTime = 0;
+    this.pauseStartTime = null;
+    
     if (this.transactionId) {
       this.log(`🔋 Đã dừng meter timer cho transaction ${this.transactionId}`);
     }
@@ -98,14 +104,21 @@ export class MeterTimer {
    * Tạm dừng bộ đếm (khi suspend).
    */
   pause() {
+    console.log(`🔍 [DEBUG] pause() called for connector ${this.connectorId}, current isRunning: ${this.isRunning}`);
+    
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
+      console.log(`🔍 [DEBUG] Timer interval cleared for connector ${this.connectorId}`);
     }
+    
     this.isRunning = false;
+    this.pauseStartTime = new Date(); // Ghi lại thời điểm bắt đầu pause
+    
+    console.log(`🔍 [DEBUG] isRunning set to false for connector ${this.connectorId}`);
     
     if (this.transactionId) {
-      this.log(`⏸️ Tạm dừng meter timer cho transaction ${this.transactionId}`);
+      this.log(`⏸️ Tạm dừng meter timer cho transaction ${this.transactionId} - isRunning: ${this.isRunning}`);
     }
   }
 
@@ -121,6 +134,14 @@ export class MeterTimer {
     if (this.isRunning) {
       this.log('⚠️ Timer đã đang chạy', 'info');
       return;
+    }
+
+    // Tính thời gian pause và cộng vào tổng thời gian pause
+    if (this.pauseStartTime) {
+      const pauseDuration = new Date() - this.pauseStartTime;
+      this.pausedTime += pauseDuration;
+      this.pauseStartTime = null;
+      this.log(`⏱️ Thời gian pause: ${Math.round(pauseDuration / 1000)}s, tổng pause: ${Math.round(this.pausedTime / 1000)}s`);
     }
 
     this.isRunning = true;
@@ -171,11 +192,32 @@ export class MeterTimer {
       currentMeterValue: Math.round(this.currentMeterValue),
       energyKwh: energyKwh,
       powerKw: Math.round(currentPowerKw * 100) / 100, // Công suất thực tế hiện tại
-      duration: this.getChargingDuration(),
+      duration: this.getChargingDurationInSeconds(), // Sử dụng method mới trả về số giây
       estimatedCost: cost.toFixed(0),
       isRunning: this.isRunning,
       pricePerKwh: this.pricePerKwh || 0 // Trả về 0 nếu chưa có giá điện
     };
+  }
+
+  /**
+   * Lấy thời gian sạc đã trôi qua tính bằng giây.
+   * @returns {number} Số giây đã sạc.
+   */
+  getChargingDurationInSeconds() {
+    if (!this.startTime) return 0;
+
+    let diffMs = new Date() - this.startTime;
+    
+    // Trừ đi tổng thời gian đã pause
+    diffMs -= this.pausedTime;
+    
+    // Nếu đang pause, trừ thêm thời gian pause hiện tại
+    if (this.pauseStartTime) {
+      diffMs -= (new Date() - this.pauseStartTime);
+    }
+    
+    // Đảm bảo không âm và chuyển đổi sang giây
+    return Math.max(0, Math.floor(diffMs / 1000));
   }
 
   /**
@@ -185,7 +227,19 @@ export class MeterTimer {
   getChargingDuration() {
     if (!this.startTime) return '00:00:00';
 
-    const diffMs = new Date() - this.startTime;
+    let diffMs = new Date() - this.startTime;
+    
+    // Trừ đi tổng thời gian đã pause
+    diffMs -= this.pausedTime;
+    
+    // Nếu đang pause, trừ thêm thời gian pause hiện tại
+    if (this.pauseStartTime) {
+      diffMs -= (new Date() - this.pauseStartTime);
+    }
+    
+    // Đảm bảo không âm
+    diffMs = Math.max(0, diffMs);
+
     const hours = Math.floor(diffMs / 3600000).toString().padStart(2, '0');
     const minutes = Math.floor((diffMs % 3600000) / 60000).toString().padStart(2, '0');
     const seconds = Math.floor((diffMs % 60000) / 1000).toString().padStart(2, '0');
@@ -234,7 +288,10 @@ export class MeterTimer {
    * Tính toán và gửi tin nhắn MeterValues.
    */
   sendMeterValues() {
+    console.log(`🔍 [DEBUG] sendMeterValues called for connector ${this.connectorId}: isRunning=${this.isRunning}, transactionId=${this.transactionId}`);
+    
     if (!this.isRunning || !this.transactionId) {
+      this.log(`⏭️ Bỏ qua sendMeterValues: isRunning=${this.isRunning}, transactionId=${this.transactionId}`);
       return;
     }
     const chargingTimeMinutes = (new Date() - this.startTime) / (1000 * 60);
