@@ -94,6 +94,47 @@ export class MeterTimer {
     }
   }
 
+  /**
+   * Tạm dừng bộ đếm (khi suspend).
+   */
+  pause() {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+    this.isRunning = false;
+    
+    if (this.transactionId) {
+      this.log(`⏸️ Tạm dừng meter timer cho transaction ${this.transactionId}`);
+    }
+  }
+
+  /**
+   * Tiếp tục bộ đếm (khi resume từ suspend).
+   */
+  resume() {
+    if (!this.transactionId) {
+      this.log('❌ Không thể resume - không có transaction ID', 'error');
+      return;
+    }
+
+    if (this.isRunning) {
+      this.log('⚠️ Timer đã đang chạy', 'info');
+      return;
+    }
+
+    this.isRunning = true;
+    this.log(`▶️ Tiếp tục meter timer cho transaction ${this.transactionId}`);
+
+    // Gửi giá trị meter ngay lập tức
+    this.sendMeterValues();
+
+    // Lên lịch gửi định kỳ
+    this.timer = setInterval(() => {
+      this.sendMeterValues();
+    }, this.interval);
+  }
+
   // Hàm để tính công suất hiện tại
   calculateCurrentPowerKw(chargingTimeMinutes) {
     let currentPowerKw = this.powerKw;

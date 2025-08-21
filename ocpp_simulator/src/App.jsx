@@ -388,6 +388,30 @@ function App() {
       };
       additionalInfo.info = `Safety check completed: ${additionalInfo.safetyCheck.passed ? 'PASSED' : 'FAILED'}`;
     }
+
+    // Xử lý MeterTimer dựa trên trạng thái mới
+    const connector = connectors.find(c => c.id === connectorId);
+    if (connector && connector.meterTimer) {
+      if (newStatus === 'SuspendedEV' || newStatus === 'SuspendedEVSE') {
+        // Tạm dừng MeterTimer khi suspend
+        connector.meterTimer.pause();
+        addLog({
+          type: 'log',
+          level: 'info',
+          message: `⏸️ MeterTimer paused for connector ${connectorId} (${newStatus})`,
+          timestamp: new Date().toISOString()
+        });
+      } else if (newStatus === 'Charging' && (connector.status === 'SuspendedEV' || connector.status === 'SuspendedEVSE')) {
+        // Tiếp tục MeterTimer khi resume từ suspend
+        connector.meterTimer.resume();
+        addLog({
+          type: 'log',
+          level: 'info',
+          message: `▶️ MeterTimer resumed for connector ${connectorId}`,
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
     
     await sendStatusNotification(connectorId, newStatus, 'NoError', additionalInfo);
     

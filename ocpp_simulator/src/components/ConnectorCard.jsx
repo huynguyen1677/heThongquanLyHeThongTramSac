@@ -59,14 +59,15 @@ const ConnectorCard = ({
       setStats(meterTimer.getChargingStats());
     }
 
-    // Chỉ chạy interval khi đang ở trạng thái 'Charging'
+    // Chỉ chạy interval khi đang ở trạng thái 'Charging' (không chạy khi suspend)
     if (status === 'Charging' && meterTimer?.isActive()) {
       // Cập nhật trạng thái mỗi giây
       interval = setInterval(() => {
         setStats(meterTimer.getChargingStats());
       }, 1000);
-    } else if (meterTimer && status === 'Available') {
+    } else if (meterTimer && (status === 'Available' || status === 'SuspendedEV' || status === 'SuspendedEVSE')) {
       // Nếu không sạc nhưng có meterTimer, vẫn hiển thị thông tin cơ bản (giá điện)
+      // Hoặc khi suspend thì vẫn hiển thị thông tin nhưng không tăng
       setStats(meterTimer.getChargingStats());
     } else {
       // Nếu không có meterTimer, reset lại các thông số
@@ -138,6 +139,19 @@ const ConnectorCard = ({
     return status === 'Charging' && transactionId && isConnected;
   };
 
+  const canSuspend = () => {
+    return status === 'Charging' && transactionId && isConnected;
+  };
+
+  const canResume = () => {
+    return (status === 'SuspendedEV' || status === 'SuspendedEVSE') && transactionId && isConnected;
+  };
+
+  const canDisconnectCable = () => {
+    return (status === 'Charging' || status === 'SuspendedEV' || status === 'SuspendedEVSE') && 
+           transactionId && isConnected;
+  };
+
   const handleLocalStart = async () => {
     if (!isReadyToStart()) {
       alert('Vui lòng hoàn thành tất cả các kiểm tra an toàn trước khi bắt đầu sạc!');
@@ -177,6 +191,70 @@ const ConnectorCard = ({
     }
   };
 
+  const handleSuspendEV = async () => {
+    if (!canSuspend()) {
+      return;
+    }
+
+    try {
+      console.log(`🚗 Suspending charging due to EV request for connector ${connectorId}`);
+      await onStatusChange(connectorId, 'SuspendedEV');
+    } catch (error) {
+      alert(`Lỗi khi tạm dừng sạc (EV): ${error.message}`);
+    }
+  };
+
+  const handleSuspendEVSE = async () => {
+    if (!canSuspend()) {
+      return;
+    }
+
+    try {
+      console.log(`⚡ Suspending charging due to EVSE limit for connector ${connectorId}`);
+      await onStatusChange(connectorId, 'SuspendedEVSE');
+    } catch (error) {
+      alert(`Lỗi khi tạm dừng sạc (EVSE): ${error.message}`);
+    }
+  };
+
+  const handleResumeCharging = async () => {
+    if (!canResume()) {
+      return;
+    }
+
+    try {
+      console.log(`🔄 Resuming charging for connector ${connectorId}`);
+      await onStatusChange(connectorId, 'Charging');
+    } catch (error) {
+      alert(`Lỗi khi tiếp tục sạc: ${error.message}`);
+    }
+  };
+
+  const handleCableDisconnect = async () => {
+    if (!canDisconnectCable()) {
+      return;
+    }
+
+    try {
+      console.log(`🔌 Cable disconnected for connector ${connectorId}, finishing transaction`);
+      // Chuyển sang Finishing trước khi về Available
+      await onStatusChange(connectorId, 'Finishing');
+      
+      // Delay ngắn để mô phỏng quá trình finishing
+      setTimeout(async () => {
+        try {
+          // Dừng transaction và chuyển về Available
+          await onLocalStop(connectorId);
+          console.log(`✅ Transaction finished for connector ${connectorId}`);
+        } catch (error) {
+          console.error(`❌ Error finishing transaction:`, error);
+        }
+      }, 2000);
+    } catch (error) {
+      alert(`Lỗi khi rút cáp: ${error.message}`);
+    }
+  };
+
   const handlePowerChange = (newPower) => {
     setPowerKw(newPower);
     if (meterTimer && meterTimer.isActive()) {
@@ -207,6 +285,8 @@ const ConnectorCard = ({
       'Available': { color: 'green', emoji: '🟢', text: 'Sẵn sàng' },
       'Preparing': { color: 'yellow', emoji: '🟡', text: 'Chuẩn bị' },
       'Charging': { color: 'blue', emoji: '🔵', text: 'Đang sạc' },
+      'SuspendedEV': { color: 'purple', emoji: '🟣', text: 'Xe tạm dừng' },
+      'SuspendedEVSE': { color: 'orange', emoji: '🟠', text: 'Trạm tạm dừng' },
       'Finishing': { color: 'orange', emoji: '🟠', text: 'Kết thúc' },
       'Unavailable': { color: 'gray', emoji: '⚫', text: 'Không khả dụng' },
       'Faulted': { color: 'red', emoji: '🔴', text: 'Lỗi' }
@@ -343,11 +423,57 @@ const ConnectorCard = ({
           >
             ⏹️ Dừng sạc (Local)
           </button>
+
+          {/* Suspend/Resume Controls */}
+          {status === 'Charging' && (
+            <>
+              <button
+                className="btn btn-warning"
+                onClick={handleSuspendEV}
+                disabled={!canSuspend()}
+                style={{ marginTop: 8 }}
+              >
+                🚗 Xe tạm dừng
+              </button>
+
+              <button
+                className="btn btn-warning"
+                onClick={handleSuspendEVSE}
+                disabled={!canSuspend()}
+                style={{ marginLeft: 8, marginTop: 8 }}
+              >
+                ⚡ Trạm tạm dừng
+              </button>
+            </>
+          )}
+
+          {(status === 'SuspendedEV' || status === 'SuspendedEVSE') && (
+            <button
+              className="btn btn-info"
+              onClick={handleResumeCharging}
+              disabled={!canResume()}
+              style={{ marginTop: 8 }}
+            >
+              🔄 Tiếp tục sạc
+            </button>
+          )}
+
+          {/* Cable Disconnect */}
+          {(status === 'Charging' || status === 'SuspendedEV' || status === 'SuspendedEVSE') && (
+            <button
+              className="btn btn-secondary"
+              onClick={handleCableDisconnect}
+              disabled={!canDisconnectCable()}
+              style={{ marginTop: 8, backgroundColor: '#6c757d' }}
+            >
+              🔌 Rút cáp sạc
+            </button>
+          )}
         </div>
       </div>
 
       {/* Charging Info */}
-      {(status === 'Charging' || transactionId) && (
+      {(status === 'Charging' || status === 'SuspendedEV' || status === 'SuspendedEVSE' || transactionId) && (
         <div className="charging-info">
           <h4>📊 Thông tin sạc</h4>
           <div className="info-grid">

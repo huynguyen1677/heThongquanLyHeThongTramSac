@@ -94,6 +94,9 @@ const StationDetail = ({ station, onClose, onStationUpdated }) => {
       'Available': { class: 'status-available', text: '🟢 Sẵn sàng' },
       'Charging': { class: 'status-charging', text: '🔵 Đang sạc' },
       'Preparing': { class: 'status-preparing', text: '🟡 Chuẩn bị' },
+      'SuspendedEV': { class: 'status-suspended', text: '🟣 Xe tạm dừng' },
+      'SuspendedEVSE': { class: 'status-suspended', text: '🟠 Trạm tạm dừng' },
+      'Finishing': { class: 'status-finishing', text: '🟠 Kết thúc' },
       'Faulted': { class: 'status-faulted', text: '🔴 Lỗi' },
       'Unavailable': { class: 'status-offline', text: '⚫ Không khả dụng' }
     };

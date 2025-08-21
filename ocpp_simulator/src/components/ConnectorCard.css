@@ -45,6 +45,11 @@
   color: #004085;
 }
 
+.status-badge.purple {
+  background: #e1d4f0;
+  color: #5a2d91;
+}
+
 .status-badge.orange {
   background: #ffeaa7;
   color: #b8860b;
@@ -216,6 +221,15 @@
 
 .btn-secondary:hover:not(:disabled) {
   background: #5a6268;
+}
+
+.btn-info {
+  background: #17a2b8;
+  color: white;
+}
+
+.btn-info:hover:not(:disabled) {
+  background: #138496;
 }
 
 .btn-gray {
