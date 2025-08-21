@@ -5,11 +5,12 @@ class CSMSApiService {
   // Get charging sessions for a specific user
   static async getChargingSessionsByUser(userId) {
     try {
-      const response = await fetch(`${CSMS_BASE_URL}/charging-sessions/user/${userId}`);
+      const response = await fetch(`${CSMS_BASE_URL}/chargingSessions/user/${userId}`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      return await response.json();
+      const result = await response.json();
+      return result.success ? result.data : [];
     } catch (error) {
       console.error('Error fetching user charging sessions:', error);
       throw error;
@@ -19,11 +20,12 @@ class CSMSApiService {
   // Get charging sessions for a specific station
   static async getChargingSessionsByStation(stationId) {
     try {
-      const response = await fetch(`${CSMS_BASE_URL}/charging-sessions/station/${stationId}`);
+      const response = await fetch(`${CSMS_BASE_URL}/chargingSessions/station/${stationId}`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      return await response.json();
+      const result = await response.json();
+      return result.success ? result.data : [];
     } catch (error) {
       console.error('Error fetching station charging sessions:', error);
       throw error;
@@ -33,11 +35,13 @@ class CSMSApiService {
   // Get charging sessions for a specific owner
   static async getChargingSessionsByOwner(ownerId) {
     try {
-      const response = await fetch(`${CSMS_BASE_URL}/charging-sessions/owner/${ownerId}`);
+      const response = await fetch(`${CSMS_BASE_URL}/chargingSessions/owner/${ownerId}`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      return await response.json();
+      const result = await response.json();
+      // Return the data array from the response
+      return result.success ? result.data : [];
     } catch (error) {
       console.error('Error fetching owner charging sessions:', error);
       throw error;
@@ -54,13 +58,14 @@ class CSMSApiService {
       if (filters.endDate) queryParams.append('endDate', filters.endDate);
       if (filters.limit) queryParams.append('limit', filters.limit);
       
-      const url = `${CSMS_BASE_URL}/charging-sessions${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+      const url = `${CSMS_BASE_URL}/chargingSessions${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
       
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      return await response.json();
+      const result = await response.json();
+      return result.success ? result.data : [];
     } catch (error) {
       console.error('Error fetching all charging sessions:', error);
       throw error;
@@ -70,11 +75,12 @@ class CSMSApiService {
   // Get specific charging session by ID
   static async getChargingSessionById(sessionId) {
     try {
-      const response = await fetch(`${CSMS_BASE_URL}/charging-sessions/${sessionId}`);
+      const response = await fetch(`${CSMS_BASE_URL}/chargingSessions/${sessionId}`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      return await response.json();
+      const result = await response.json();
+      return result.success ? result.data : null;
     } catch (error) {
       console.error('Error fetching charging session by ID:', error);
       throw error;
@@ -84,11 +90,12 @@ class CSMSApiService {
   // Get charging session statistics for an owner
   static async getChargingSessionStats(ownerId, timeRange = '30d') {
     try {
-      const response = await fetch(`${CSMS_BASE_URL}/charging-sessions/stats/${ownerId}?range=${timeRange}`);
+      const response = await fetch(`${CSMS_BASE_URL}/chargingSessions/stats/${ownerId}?range=${timeRange}`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      return await response.json();
+      const result = await response.json();
+      return result.success ? result.data : {};
     } catch (error) {
       console.error('Error fetching charging session stats:', error);
       throw error;

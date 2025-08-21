@@ -1,23 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { auth } from '../services/firebase'
+import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore'
+import { auth, db } from '../services/firebase'
 import { formatCurrency, formatEnergy, formatDuration } from '../utils/format'
-
-// CSMS API Service for fetching charging sessions
-const CSMSApiService = {
-  async getChargingSessionsByUser(userId) {
-    try {
-      const response = await fetch(`http://localhost:3001/api/charging-sessions/user/${userId}`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      return await response.json();
-    } catch (error) {
-      console.error('Error fetching user charging sessions:', error);
-      throw error;
-    }
-  }
-};
 
 export default function History() {
   const [filter, setFilter] = useState('all') // all, completed, cancelled, active
@@ -37,11 +22,30 @@ export default function History() {
         setIsLoading(true);
         setError(null);
         
-        // Fetch charging sessions from CSMS API
-        const sessionsData = await CSMSApiService.getChargingSessionsByUser(userId);
+        // Query Firestore directly for charging sessions by userId
+        // Remove orderBy to avoid composite index requirement for now
+        const sessionsRef = collection(db, 'chargingSessions');
+        const q = query(
+          sessionsRef,
+          where('userId', '==', userId),
+          limit(100)
+        );
+        
+        const querySnapshot = await getDocs(q);
+        const sessionsData = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        
+        // Sort manually after fetching
+        const sortedSessions = sessionsData.sort((a, b) => {
+          const dateA = new Date(a.startTime);
+          const dateB = new Date(b.startTime);
+          return dateB - dateA; // Newest first
+        });
         
         // Filter by date range
-        const filteredByDate = sessionsData.filter(session => {
+        const filteredByDate = sortedSessions.filter(session => {
           if (dateRange === 'all') return true;
           
           const sessionDate = new Date(session.startTime);
@@ -54,7 +58,7 @@ export default function History() {
         
         setSessions(filteredByDate);
       } catch (err) {
-        console.error('Error fetching charging sessions:', err);
+        console.error('Error fetching charging sessions from Firestore:', err);
         setError('Không thể tải lịch sử phiên sạc');
         setSessions([]); // Set empty array on error
       } finally {

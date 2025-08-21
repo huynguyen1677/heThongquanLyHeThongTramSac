@@ -3,6 +3,7 @@ import LoginForm from './components/LoginForm';
 import Header from './components/Header';
 import StationList from './components/StationList';
 import ChargingSessionsList from './components/ChargingSessionsList';
+import SyncButton from './components/SyncButton';
 import RealtimeService from './services/realtime';
 import AuthService from './services/auth';
 
@@ -45,23 +46,10 @@ function App() {
     }
   };
 
-  const handleSyncData = async () => {
-    if (!currentUser) return;
-
-    setIsLoading(true);
-    try {
-      console.log(`🔄 Starting data sync for owner: ${currentUser.ownerId}...`);
-      const result = await RealtimeService.syncRealtimeToFirestore(currentUser.ownerId);
-      
-      alert(`Đồng bộ hoàn tất!\n✅ Đã đồng bộ: ${result.synced} trạm\n⏭️ Đã bỏ qua: ${result.skipped} trạm (đã tồn tại)`);
-      
-      // Reload the page to show updated data
+  const handleSyncComplete = (result) => {
+    // Reload the page to show updated data after successful sync
+    if (result && !result.error) {
       window.location.reload();
-    } catch (error) {
-      console.error('Sync error:', error);
-      alert(`Lỗi khi đồng bộ dữ liệu: ${error.message}`);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -85,7 +73,6 @@ function App() {
       <Header
         user={currentUser}
         onLogout={handleLogout}
-        onSyncData={handleSyncData}
       />
       
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '1rem' }}>
@@ -98,8 +85,10 @@ function App() {
                 padding: '0.75rem 0',
                 color: activeTab === 'stations' ? '#2563eb' : '#6b7280',
                 borderBottom: activeTab === 'stations' ? '2px solid #2563eb' : '2px solid transparent',
+                borderTop: 'none',
+                borderLeft: 'none',
+                borderRight: 'none',
                 background: 'none',
-                border: 'none',
                 cursor: 'pointer',
                 fontWeight: activeTab === 'stations' ? '600' : '400'
               }}
@@ -112,8 +101,10 @@ function App() {
                 padding: '0.75rem 0',
                 color: activeTab === 'sessions' ? '#2563eb' : '#6b7280',
                 borderBottom: activeTab === 'sessions' ? '2px solid #2563eb' : '2px solid transparent',
+                borderTop: 'none',
+                borderLeft: 'none',
+                borderRight: 'none',
                 background: 'none',
-                border: 'none',
                 cursor: 'pointer',
                 fontWeight: activeTab === 'sessions' ? '600' : '400'
               }}
@@ -122,6 +113,12 @@ function App() {
             </button>
           </nav>
         </div>
+
+        {/* Sync Button */}
+        <SyncButton 
+          ownerId={currentUser.ownerId}
+          onSyncComplete={handleSyncComplete}
+        />
 
         {/* Tab Content */}
         <main>

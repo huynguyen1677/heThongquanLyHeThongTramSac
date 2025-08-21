@@ -1,12 +1,6 @@
-import { LogOut, User, RefreshCw } from 'lucide-react';
+import { LogOut, User } from 'lucide-react';
 
-const Header = ({ user, onLogout, onSyncData }) => {
-  const handleSync = async () => {
-    if (confirm('Bạn có muốn đồng bộ dữ liệu từ Realtime Database sang Firestore không?')) {
-      await onSyncData();
-    }
-  };
-
+const Header = ({ user, onLogout }) => {
   return (
     <header style={{
       background: 'white',
@@ -31,15 +25,6 @@ const Header = ({ user, onLogout, onSyncData }) => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <button 
-            onClick={handleSync}
-            className="btn btn-outline"
-            title="Đồng bộ dữ liệu từ Realtime"
-          >
-            <RefreshCw size={16} />
-            Đồng bộ
-          </button>
-
           <div style={{ 
             display: 'flex', 
             alignItems: 'center', 
