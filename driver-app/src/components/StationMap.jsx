@@ -1,195 +1,533 @@
-import { useEffect, useState } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
+import React, { useState, useEffect } from 'react';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import L from 'leaflet';
+import { Zap, MapPin, Loader, Wifi, WifiOff } from 'lucide-react';
+import 'leaflet/dist/leaflet.css'; // Import Leaflet's CSS
+import RealtimeService from '../services/realtimeService';
+import StationPopup from './StationPopup';
 
-// Fix for default markers
-delete L.Icon.Default.prototype._getIconUrl
+// Fix Leaflet default icons
+// This is a common workaround for issues with Webpack and Leaflet's default icon paths.
+delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-})
+});
 
-// Custom charging station icon
-const chargingIcon = new L.Icon({
-  iconUrl: 'data:image/svg+xml;base64,' + btoa(`
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#10B981" width="32" height="32">
-      <path d="M14.5 11l-3 6v-4h-2l3-6v4h2zm-7 7c0-.55-.45-1-1-1s-1 .45-1 1 .45 1 1 1 1-.45 1-1zm15.5-1c0 .55-.45 1-1 1s-1-.45-1-1 .45-1 1-1 1 .45 1 1zm-3-9c.55 0 1-.45 1-1V5.5l-.5-.5h-3l-.5.5V7c0 .55.45 1 1 1h2zm-7 0c.55 0 1-.45 1-1V5.5l-.5-.5h-3l-.5.5V7c0 .55.45 1 1 1h2zm7.5-3c.55 0 1-.45 1-1s-.45-1-1-1-1 .45-1 1 .45 1 1 1zm-7 0c.55 0 1-.45 1-1s-.45-1-1-1-1 .45-1 1 .45 1 1 1z"/>
-    </svg>
-  `),
-  iconSize: [32, 32],
-  iconAnchor: [16, 32],
-  popupAnchor: [0, -32]
-})
-
-// Component to handle map centering
-function MapCenter({ center }) {
-  const map = useMap()
+// Create beautiful station icons
+const createStationIcon = (status, isSelected = false) => {
+  const colors = {
+    available: '#10b981', // Green
+    occupied: '#f59e0b', // Amber
+    charging: '#3b82f6', // Blue
+    faulted: '#ef4444', // Red
+    offline: '#6b7280' // Gray
+  };
   
-  useEffect(() => {
-    if (center) {
-      map.setView(center, map.getZoom())
+  const color = colors[status] || colors.offline;
+  const size = isSelected ? 28 : 24;
+  const pulseAnimation = status === 'charging' ? `
+    animation: pulse 2s infinite;
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.1); opacity: 0.8; }
     }
-  }, [center, map])
+  ` : '';
   
-  return null
-}
+  return L.divIcon({
+    html: `
+      <div style="
+        width: ${size}px;
+        height: ${size}px;
+        background: ${color};
+        border: 3px solid white;
+        border-radius: 50%;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        ${pulseAnimation}
+        ${isSelected ? 'box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3);' : ''}
+      ">
+        <div style="
+          width: 8px;
+          height: 8px;
+          background: white;
+          border-radius: 50%;
+        "></div>
+        ${isSelected ? `
+          <div style="
+            position: absolute;
+            top: -8px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-bottom: 8px solid ${color};
+          "></div>
+        ` : ''}
+      </div>
+    `,
+    className: 'custom-station-icon',
+    iconSize: [size, size],
+    iconAnchor: [size/2, size/2]
+  });
+};
 
-export default function StationMap({ stations = [], center, onStationClick, height = '400px' }) {
-  const [userLocation, setUserLocation] = useState(null)
+// Create user location icon
+const createUserIcon = () => {
+  return L.divIcon({
+    html: `
+      <div style="
+        width: 16px;
+        height: 16px;
+        background: #3b82f6;
+        border: 3px solid white;
+        border-radius: 50%;
+        box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+        animation: userPulse 3s infinite;
+      "></div>
+      <style>
+        @keyframes userPulse {
+          0% { box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4), 0 0 0 0 rgba(59, 130, 246, 0.7); }
+          70% { box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4), 0 0 0 10px rgba(59, 130, 246, 0); }
+          100% { box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4), 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+      </style>
+    `,
+    className: 'user-location-icon',
+    iconSize: [16, 16],
+    iconAnchor: [8, 8]
+  });
+};
+
+const StationMap = ({ onStationSelect, userLocation, selectedStationId }) => {
+  const [stations, setStations] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   
   // Default center (Ho Chi Minh City)
-  const defaultCenter = center || [10.8231, 106.6297]
-  
+  const defaultCenter = [10.8231, 106.6297];
+  const mapCenter = userLocation || defaultCenter;
+
   useEffect(() => {
-    // Get user's current location
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setUserLocation([position.coords.latitude, position.coords.longitude])
-        },
-        (error) => {
-          console.log('Error getting location:', error)
-        }
-      )
+    const unsubscribe = RealtimeService.subscribeToStations(
+      (stationsData) => {
+        const stationsWithLocation = stationsData.filter(station => 
+          station.location && 
+          station.location.latitude && 
+          station.location.longitude
+        );
+        setStations(stationsWithLocation);
+        setLoading(false);
+        setError(null);
+      },
+      (error) => {
+        console.error('Error loading stations:', error);
+        setError('Không thể tải dữ liệu trạm sạc');
+        setLoading(false);
+      }
+    );
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, []);
+
+  const getStationStatus = (station) => {
+    if (!station.connectors) return 'offline';
+    
+    const connectors = Object.values(station.connectors);
+    if (connectors.length === 0) return 'offline';
+    
+    if (connectors.some(c => c.status === 'Charging')) return 'charging';
+    if (connectors.some(c => c.status === 'Available')) return 'available';
+    if (connectors.every(c => c.status === 'Occupied' || c.status === 'Preparing')) return 'occupied';
+    if (connectors.some(c => c.status === 'Faulted')) return 'faulted';
+    
+    return 'offline';
+  };
+
+  const handleStationClick = (station) => {
+    if (onStationSelect) {
+      onStationSelect(station);
     }
-  }, [])
+  };
+
+  const getStatusStats = () => {
+    const stats = {
+      available: 0,
+      charging: 0,
+      occupied: 0,
+      faulted: 0,
+      offline: 0
+    };
+    
+    stations.forEach(station => {
+      const status = getStationStatus(station);
+      stats[status]++;
+    });
+    
+    return stats;
+  };
+
+  const stats = getStatusStats();
+
+  if (loading) {
+    return (
+      <>
+        <style>
+          {`
+          .map-loading-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            color: #0369a1;
+          }
+          
+          .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #bfdbfe;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+          }
+          
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+          
+          .loading-text {
+            font-size: 0.875rem;
+            font-weight: 500;
+          }
+          `}
+        </style>
+        <div className="map-loading-container">
+          <div className="loading-spinner"></div>
+          <span className="loading-text">Đang tải bản đồ và trạm sạc...</span>
+        </div>
+      </>
+    );
+  }
+
+  if (error) {
+    return (
+      <>
+        <style>
+          {`
+          .map-error-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+            color: #dc2626;
+            text-align: center;
+            padding: 2rem;
+          }
+          
+          .error-icon {
+            margin-bottom: 1rem;
+          }
+          
+          .error-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+          }
+          
+          .error-message {
+            font-size: 0.875rem;
+            opacity: 0.8;
+          }
+          `}
+        </style>
+        <div className="map-error-container">
+          <WifiOff size={48} className="error-icon" />
+          <h3 className="error-title">Không thể tải bản đồ</h3>
+          <p className="error-message">{error}</p>
+        </div>
+      </>
+    );
+  }
 
   return (
-    <div className="map-container" style={{ height, width: '100%' }}>
-      <MapContainer
-        center={userLocation || defaultCenter}
-        zoom={13}
-        style={{ height: '100%', width: '100%', borderRadius: '12px' }}
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+    <>
+      <style>
+        {`
+        .map-container {
+          position: relative;
+          height: 100%;
+          width: 100%;
+          background: #f8fafc;
+        }
         
-        <MapCenter center={center} />
+        .leaflet-container {
+          height: 100%;
+          width: 100%;
+          border-radius: 0;
+        }
         
-        {/* User location marker */}
-        {userLocation && (
-          <Marker position={userLocation}>
-            <Popup>
-              <div className="text-center">
-                <div className="text-lg mb-1">📍</div>
-                <div className="font-medium">Vị trí của bạn</div>
-              </div>
-            </Popup>
-          </Marker>
-        )}
+        .map-legend {
+          position: absolute;
+          bottom: 20px;
+          left: 20px;
+          background: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(10px);
+          border-radius: 12px;
+          padding: 1rem;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+          border: 1px solid rgba(226, 232, 240, 0.8);
+          z-index: 1000;
+          min-width: 200px;
+        }
         
-        {/* Charging station markers */}
-        {stations.map((station) => (
-          <Marker
-            key={station.id}
-            position={[station.latitude, station.longitude]}
-            icon={chargingIcon}
-            eventHandlers={{
-              click: () => onStationClick && onStationClick(station)
-            }}
-          >
-            <Popup>
-              <div className="min-w-64">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-lg">⚡</span>
-                  <h3 className="font-bold text-gray-900">{station.name}</h3>
+        .legend-title {
+          font-size: 0.875rem;
+          font-weight: 600;
+          color: #1f2937;
+          margin-bottom: 0.75rem;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+        
+        .legend-items {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+        }
+        
+        .legend-item {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          font-size: 0.75rem;
+          color: #6b7280;
+        }
+        
+        .legend-dot {
+          width: 12px;
+          height: 12px;
+          border-radius: 50%;
+          border: 2px solid white;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+          flex-shrink: 0;
+        }
+        
+        .legend-count {
+          margin-left: auto;
+          font-weight: 600;
+          color: #374151;
+          background: #f3f4f6;
+          padding: 0.125rem 0.375rem;
+          border-radius: 4px;
+          font-size: 0.625rem;
+        }
+        
+        .map-stats {
+          position: absolute;
+          top: 20px;
+          left: 20px;
+          background: rgba(255, 255, 255, 0.95);
+          backdrop-filter: blur(10px);
+          border-radius: 12px;
+          padding: 1rem;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+          border: 1px solid rgba(226, 232, 240, 0.8);
+          z-index: 1000;
+        }
+        
+        .stats-title {
+          font-size: 0.875rem;
+          font-weight: 600;
+          color: #1f2937;
+          margin-bottom: 0.5rem;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+        
+        .stats-number {
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: #3b82f6;
+        }
+        
+        .stats-label {
+          font-size: 0.75rem;
+          color: #6b7280;
+        }
+        
+        /* Custom popup styles */
+        .leaflet-popup-content-wrapper {
+          border-radius: 12px;
+          box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+          border: 1px solid rgba(0, 0, 0, 0.1);
+        }
+        
+        .leaflet-popup-tip {
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Mobile responsive */
+        @media (max-width: 768px) {
+          .map-legend {
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            padding: 0.75rem;
+          }
+          
+          .legend-items {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+          }
+          
+          .map-stats {
+            top: 10px;
+            left: 10px;
+            padding: 0.75rem;
+          }
+        }
+        `}
+      </style>
+      
+      <div className="map-container">
+        <MapContainer
+          center={mapCenter}
+          zoom={userLocation ? 15 : 12}
+          style={{ height: '100%', width: '100%' }}
+          zoomControl={true}
+          scrollWheelZoom={true}
+        >
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            maxZoom={19}
+          />
+          
+          {/* User location marker */}
+          {userLocation && (
+            <Marker 
+              position={userLocation}
+              icon={createUserIcon()}
+              zIndexOffset={1000}
+            >
+              <Popup>
+                <div style={{ 
+                  padding: '0.75rem',
+                  textAlign: 'center',
+                  minWidth: '150px'
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.5rem',
+                    marginBottom: '0.5rem'
+                  }}>
+                    <MapPin size={16} color="#3b82f6" />
+                    <strong style={{ color: '#1f2937' }}>Vị trí của bạn</strong>
+                  </div>
+                  <p style={{ 
+                    margin: 0, 
+                    fontSize: '0.75rem', 
+                    color: '#6b7280' 
+                  }}>
+                    {userLocation[0].toFixed(4)}, {userLocation[1].toFixed(4)}
+                  </p>
                 </div>
-                
-                <div className="space-y-2 text-sm text-gray-600 mb-4">
-                  <div className="flex items-center gap-1">
-                    <span>📍</span>
-                    <span>{station.address}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span>🔌</span>
-                    <span>{station.totalConnectors || 0} connector(s)</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span>⭐</span>
-                    <span>{station.rating || 'N/A'}</span>
-                  </div>
-                  {station.vendor && (
-                    <div className="flex items-center gap-1">
-                      <span>🏭</span>
-                      <span>{station.vendor} {station.model}</span>
-                    </div>
-                  )}
-                </div>
-                
-                {/* Station Status Summary */}
-                {station.totalConnectors > 0 && (
-                  <div className="grid grid-cols-3 gap-2 mb-4">
-                    <div className="text-center p-2 bg-green-50 rounded-lg">
-                      <div className="text-lg font-bold text-green-600">{station.availableConnectors || 0}</div>
-                      <div className="text-xs text-green-700">Sẵn sàng</div>
-                    </div>
-                    <div className="text-center p-2 bg-blue-50 rounded-lg">
-                      <div className="text-lg font-bold text-blue-600">{station.chargingConnectors || 0}</div>
-                      <div className="text-xs text-blue-700">Đang sạc</div>
-                    </div>
-                    <div className="text-center p-2 bg-red-50 rounded-lg">
-                      <div className="text-lg font-bold text-red-600">{station.errorConnectors || 0}</div>
-                      <div className="text-xs text-red-700">Lỗi</div>
-                    </div>
-                  </div>
-                )}
+              </Popup>
+            </Marker>
+          )}
+          
+          {/* Station markers */}
+          {stations.map((station) => {
+            const status = getStationStatus(station);
+            const isSelected = selectedStationId === station.stationId;
 
-                {/* Available connectors */}
-                {station.connectors && station.connectors.length > 0 && (
-                  <div className="space-y-2 mb-4">
-                    <div className="font-medium text-gray-800">Chi tiết connectors:</div>
-                    {station.connectors.slice(0, 3).map((connector, index) => (
-                      <div key={index} className="flex items-center justify-between text-xs p-2 bg-gray-50 rounded">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">#{connector.id}</span>
-                          <span className="text-gray-600">
-                            {connector.type} - {connector.power}kW
-                          </span>
-                        </div>
-                        <div className="flex flex-col items-end gap-1">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            connector.status === 'Available' 
-                              ? 'bg-green-100 text-green-800' 
-                              : connector.status === 'Charging'
-                              ? 'bg-blue-100 text-blue-800'
-                              : connector.status === 'Occupied'
-                              ? 'bg-yellow-100 text-yellow-800'
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {connector.status}
-                          </span>
-                          {connector.isCharging && (
-                            <div className="text-right">
-                              <div className="text-blue-600 font-medium">{connector.currentPower}W</div>
-                              <div className="text-gray-500">{connector.sessionKwh?.toFixed(2)}kWh</div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                    {station.connectors.length > 3 && (
-                      <div className="text-xs text-gray-500 text-center">
-                        +{station.connectors.length - 3} connector(s) khác
-                      </div>
-                    )}
-                  </div>
-                )}
-                
-                <button
-                  onClick={() => onStationClick && onStationClick(station)}
-                  className="w-full bg-blue-600 text-white py-2 px-3 rounded-lg text-sm font-medium hover:bg-blue-700"
-                >
-                  Xem chi tiết
-                </button>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
-      </MapContainer>
-    </div>
-  )
-}
+            return (
+              <Marker
+                key={station.stationId}
+                position={[station.location.latitude, station.location.longitude]}
+                icon={createStationIcon(status, isSelected)}
+                eventHandlers={{
+                  click: () => handleStationClick(station)
+                }}
+                zIndexOffset={isSelected ? 1000 : 0}
+              >
+                <Popup>
+                  <StationPopup 
+                    station={station} 
+                    onStationSelect={handleStationClick}
+                  />
+                </Popup>
+              </Marker>
+            );
+          })}
+        </MapContainer>
+        
+        {/* Map Statistics */}
+        <div className="map-stats">
+          <div className="stats-title">
+            <Zap size={16} />
+            Tổng trạm sạc
+          </div>
+          <div className="stats-number">{stations.length}</div>
+          <div className="stats-label">trạm đang hoạt động</div>
+        </div>
+        
+        {/* Map Legend */}
+        <div className="map-legend">
+          <div className="legend-title">
+            <MapPin size={16} />
+            Trạng thái trạm
+          </div>
+          <div className="legend-items">
+            <div className="legend-item">
+              <div className="legend-dot" style={{ background: '#10b981' }}></div>
+              <span>Có sẵn</span>
+              <span className="legend-count">{stats.available}</span>
+            </div>
+            <div className="legend-item">
+              <div className="legend-dot" style={{ background: '#3b82f6' }}></div>
+              <span>Đang sạc</span>
+              <span className="legend-count">{stats.charging}</span>
+            </div>
+            <div className="legend-item">
+              <div className="legend-dot" style={{ background: '#f59e0b' }}></div>
+              <span>Đã đầy</span>
+              <span className="legend-count">{stats.occupied}</span>
+            </div>
+            <div className="legend-item">
+              <div className="legend-dot" style={{ background: '#ef4444' }}></div>
+              <span>Lỗi</span>
+              <span className="legend-count">{stats.faulted}</span>
+            </div>
+            <div className="legend-item">
+              <div className="legend-dot" style={{ background: '#6b7280' }}></div>
+              <span>Offline</span>
+              <span className="legend-count">{stats.offline}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+};
+
+export default StationMap;
