@@ -111,62 +111,53 @@ export const ChargingProvider = ({ children }) => {
   // (dùng cho danh sách trạm)
   useEffect(() => {
     const liveStationsRef = ref(realtimeDb, 'live/stations')
-    
+
     const handleLiveStationsUpdate = (snapshot) => {
       const liveData = snapshot.val()
       console.log('Live stations data from RTDB:', liveData)
-      
-      if (liveData) {
-        // Merge live data với Firestore data
-        setStations(prevStations => {
-          return prevStations.map(station => {
-            const liveStation = liveData[station.id]
-            if (liveStation) {
-              // Cập nhật thông tin live
-              const updatedStation = {
-                ...station,
-                online: liveStation.online || false,
-                lastHeartbeat: liveStation.lastHeartbeat,
-                status: liveStation.online ? 'Online' : 'Offline',
-              }
 
-              // Cập nhật thông tin connectors từ live data
-              if (liveStation.connectors && station.connectors) {
-                // Chuẩn hóa connectors về mảng
-                const connectorsArray = Array.isArray(station.connectors)
-                  ? station.connectors
-                  : Object.entries(station.connectors).map(([id, val]) => ({ id, ...val }));
+      setStations(prevStations =>
+        prevStations.map(station => {
+          const liveStation = liveData?.[station.id]
+          if (liveStation) {
+            // Chỉ cập nhật các trường trạng thái từ realtime
+            let updatedStation = { ...station }
+            updatedStation.online = !!liveStation.online
+            updatedStation.lastHeartbeat = liveStation.lastHeartbeat
+            updatedStation.status = liveStation.online ? 'Online' : 'Offline'
 
-                updatedStation.connectors = connectorsArray.map(connector => {
-                  const liveConnector = liveStation.connectors[connector.id];
-                  if (liveConnector) {
-                    return {
-                      ...connector,
-                      status: liveConnector.status || 'Unavailable',
-                      txId: liveConnector.txId,
-                      energyConsumed: liveConnector.kwh || 0,
-                      currentPower: liveConnector.W_now || 0,
-                      sessionKwh: liveConnector.session_kwh || 0,
-                      sessionCost: liveConnector.session_cost || 0,
-                      totalCost: liveConnector.costEstimate || 0,
-                      lastUpdate: liveConnector.lastUpdate,
-                      errorCode: liveConnector.errorCode
-                    }
-                  }
-                  return connector
-                })
-              }
+            // Merge connectors trạng thái realtime
+            if (liveStation.connectors && station.connectors) {
+              const connectorsArray = Array.isArray(station.connectors)
+                ? station.connectors
+                : Object.entries(station.connectors).map(([id, val]) => ({ id, ...val }))
 
-              return updatedStation
+              updatedStation.connectors = connectorsArray.map(connector => {
+                const liveConnector = liveStation.connectors[connector.id]
+                return {
+                  ...connector,
+                  ...(liveConnector
+                    ? {
+                        status: liveConnector.status || 'Unavailable',
+                        txId: liveConnector.txId,
+                        energyConsumed: liveConnector.kwh || 0,
+                        currentPower: liveConnector.W_now || 0,
+                        sessionKwh: liveConnector.session_kwh || 0,
+                        sessionCost: liveConnector.session_cost || 0,
+                        totalCost: liveConnector.costEstimate || 0,
+                        lastUpdate: liveConnector.lastUpdate,
+                        errorCode: liveConnector.errorCode
+                      }
+                    : {})
+                }
+              })
             }
-            return {
-              ...station,
-              status: 'Offline',
-              online: false
-            }
-          })
+            return updatedStation
+          }
+          // Nếu không có realtime thì không set status/online/lastHeartbeat
+          return { ...station }
         })
-      }
+      )
     }
 
     onValue(liveStationsRef, handleLiveStationsUpdate, (error) => {
