@@ -4,27 +4,38 @@ import { useCharging } from '../contexts/ChargingContext'
 import { formatDistanceToNow } from 'date-fns'
 import { vi } from 'date-fns/locale'
 
+const toConnectorArray = (connectors) =>
+  Array.isArray(connectors)
+    ? connectors
+    : connectors
+    ? Object.entries(connectors).map(([id, val]) => ({ id, ...val }))
+    : [];
+
 const Stations = () => {
-  const { stations, loading, refreshStations, pricePerKwh } = useCharging()
-  const [searchTerm, setSearchTerm] = useState('')
-  const [selectedType, setSelectedType] = useState('all')
-  const [selectedStatus, setSelectedStatus] = useState('all')
+  const { stations, loading, refreshStations, pricePerKwh } = useCharging();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedType, setSelectedType] = useState('all');
+  const [selectedStatus, setSelectedStatus] = useState('all');
 
   // Filter stations
   const filteredStations = stations.filter(station => {
-    const matchesSearch = station.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         station.address.toLowerCase().includes(searchTerm.toLowerCase())
-    
-    const matchesStatus = selectedStatus === 'all' || 
-                         (selectedStatus === 'online' && station.status === 'Online') ||
-                         (selectedStatus === 'offline' && station.status === 'Offline')
-    
-    const matchesType = selectedType === 'all' ||
-                       station.connectors.some(c => 
-                         selectedType === 'ac' ? c.type === 'AC' : c.type === 'DC'
-                       )
-    
-    return matchesSearch && matchesStatus && matchesType
+    const connectorsArr = toConnectorArray(station.connectors);
+    const matchesSearch =
+      (station.name || station.stationName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (station.address || '').toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesStatus =
+      selectedStatus === 'all' ||
+      (selectedStatus === 'online' && station.status === 'Online') ||
+      (selectedStatus === 'offline' && station.status === 'Offline');
+
+    const matchesType =
+      selectedType === 'all' ||
+      connectorsArr.some(c =>
+        selectedType === 'ac' ? c.type === 'AC' : c.type === 'DC'
+      );
+
+    return matchesSearch && matchesStatus && matchesType;
   })
 
   const handleRefresh = async () => {
@@ -172,10 +183,11 @@ const Stations = () => {
 
 // Station Card Component
 const StationCard = ({ station }) => {
-  const { pricePerKwh } = useCharging()
-  const availableConnectors = station.connectors?.filter(c => c.status === 'Available') || []
-  const chargingConnectors = station.connectors?.filter(c => c.status === 'Charging') || []
-  const faultedConnectors = station.connectors?.filter(c => c.status === 'Faulted') || []
+  const { pricePerKwh } = useCharging();
+  const connectorsArr = toConnectorArray(station.connectors);
+  const availableConnectors = connectorsArr.filter(c => c.status === 'Available');
+  const chargingConnectors = connectorsArr.filter(c => c.status === 'Charging');
+  const faultedConnectors = connectorsArr.filter(c => c.status === 'Faulted');
   
   // Format last heartbeat time
   const formatLastSeen = (timestamp) => {
@@ -201,9 +213,7 @@ const StationCard = ({ station }) => {
   const stationStatus = getStationStatus()
   
   return (
-    <div className={`station-card ${
-      station.online ? 'station-status-online' : 'station-status-offline'
-    }`}>
+    <div className={`station-card ${station.online ? 'station-status-online' : 'station-status-offline'}`}>
       {/* Header */}
       <div className="flex justify-between items-start mb-4">
         <div className="flex-1">
@@ -234,20 +244,25 @@ const StationCard = ({ station }) => {
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-medium text-gray-700">Cổng sạc</span>
           <span className="text-xs text-gray-500">
-            {availableConnectors.length}/{station.connectors?.length || 0} có sẵn
+            {availableConnectors.length}/{connectorsArr.length}
           </span>
         </div>
         <div className="grid grid-cols-2 gap-2">
-          {station.connectors?.length > 0 ? station.connectors.map(connector => (
-            <div 
+          {connectorsArr.length > 0 ? connectorsArr.map(connector => (
+            <div
               key={connector.id}
               className={`connector-card ${
-                connector.status === 'Available' ? 'connector-available' :
-                connector.status === 'Charging' ? 'connector-charging' :
-                connector.status === 'Preparing' ? 'connector-occupied' :
-                connector.status === 'Finishing' ? 'connector-occupied' :
-                connector.status === 'Faulted' ? 'connector-faulted' :
-                'connector-unavailable'
+                connector.status === 'Available'
+                  ? 'connector-available'
+                  : connector.status === 'Charging'
+                  ? 'connector-charging'
+                  : connector.status === 'Preparing'
+                  ? 'connector-occupied'
+                  : connector.status === 'Finishing'
+                  ? 'connector-occupied'
+                  : connector.status === 'Faulted'
+                  ? 'connector-faulted'
+                  : 'connector-unavailable'
               }`}
             >
               <div className="font-medium text-sm">

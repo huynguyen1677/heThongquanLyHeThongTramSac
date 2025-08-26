@@ -21,6 +21,8 @@ function App() {
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/stations" element={<Stations />} />
+                <Route path="/stations/:stationId" element={<ChargingSession />} />
+                <Route path="/stations/:stationId/:connectorId" element={<ChargingSession />} />
                 <Route path="/charging/:stationId/:connectorId" element={<ChargingSession />} />
                 <Route path="/history" element={<History />} />
                 <Route path="/profile" element={<Profile />} />

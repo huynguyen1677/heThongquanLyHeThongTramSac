@@ -1,10 +1,12 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import { useCharging } from "../contexts/ChargingContext";
 
 const statusColor = (online) => (online ? "#4caf50" : "#f44336");
 
 function StationList() {
   const { stations, loading } = useCharging();
+  const navigate = useNavigate();
 
   if (loading) return <div>Đang tải...</div>;
 
@@ -67,6 +69,9 @@ function StationList() {
             {station.connectors && (
               <div style={{ marginTop: 10 }}>
                 <strong>Connectors:</strong>
+                <div style={{ fontSize: 12, color: "#666", marginBottom: 8 }}>
+                  💡 Click vào connector để bắt đầu sạc
+                </div>
                 <ul style={{ paddingLeft: 18, margin: 0 }}>
                   {(Array.isArray(station.connectors)
                     ? station.connectors
@@ -78,7 +83,22 @@ function StationList() {
                         marginBottom: 6,
                         background: "#f5f5f5",
                         borderRadius: 8,
-                        padding: "6px 10px"
+                        padding: "6px 10px",
+                        cursor: "pointer",
+                        transition: "all 0.2s",
+                        border: "1px solid transparent"
+                      }}
+                      onClick={() => {
+                        const connectorId = connector.id || idx.toString();
+                        navigate(`/charging/${station.id}/${connectorId}`);
+                      }}
+                      onMouseEnter={(e) => {
+                        e.target.style.background = "#e3f2fd";
+                        e.target.style.borderColor = "#2196f3";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.background = "#f5f5f5";
+                        e.target.style.borderColor = "transparent";
                       }}
                     >
                       <div>

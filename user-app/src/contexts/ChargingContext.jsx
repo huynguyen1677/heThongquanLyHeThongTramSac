@@ -6,6 +6,7 @@ import { useAuth } from './AuthContext'
 import apiService from '../services/api'
 import settingsService from '../services/settingsService'
 
+
 const ChargingContext = createContext()
 
 export const useCharging = () => {
@@ -178,25 +179,29 @@ export const ChargingProvider = ({ children }) => {
     
     const handleConnectorUpdate = (snapshot) => {
       const connectorData = snapshot.val()
+      console.log('[Realtime] Connector update fired:', connectorData)
       if (connectorData && connectorData.txId) {
         // Cập nhật session với dữ liệu real-time từ connector
-        setActiveSession(prev => ({
-          ...prev,
-          energyConsumed: connectorData.session_kwh || prev.energyConsumed || 0,
-          totalEnergyConsumed: connectorData.kwh || 0,
-          cost: connectorData.session_cost || prev.cost || 0,
-          totalCost: connectorData.costEstimate || 0,
-          currentPower: connectorData.W_now || 0,
-          connectorStatus: connectorData.status,
-          lastUpdate: connectorData.lastUpdate,
-          transactionId: connectorData.txId,
-          meterValues: {
-            ...prev.meterValues,
-            whTotal: connectorData.Wh_total || 0,
-            sessionKwh: connectorData.session_kwh || 0,
-            power: connectorData.W_now || 0
+        setActiveSession(prev => {
+          console.log('[Realtime] setActiveSession called', { prev, connectorData })
+          return {
+            ...prev,
+            energyConsumed: connectorData.session_kwh || prev.energyConsumed || 0,
+            totalEnergyConsumed: connectorData.kwh || 0,
+            cost: connectorData.session_cost || prev.cost || 0,
+            totalCost: connectorData.costEstimate || 0,
+            currentPower: connectorData.W_now || 0,
+            connectorStatus: connectorData.status,
+            lastUpdate: connectorData.lastUpdate,
+            transactionId: connectorData.txId,
+            meterValues: {
+              ...prev.meterValues,
+              whTotal: connectorData.Wh_total || 0,
+              sessionKwh: connectorData.session_kwh || 0,
+              power: connectorData.W_now || 0
+            }
           }
-        }))
+        })
       }
     }
 
@@ -206,6 +211,48 @@ export const ChargingProvider = ({ children }) => {
 
     return () => {
       off(connectorRef, 'value', handleConnectorUpdate)
+    }
+  }, [activeSession?.id, activeSession?.stationId, activeSession?.connectorId, user])
+
+  // Lắng nghe thay đổi của toàn bộ station (bao gồm tất cả connectors)
+  useEffect(() => {
+    if (!activeSession || !user) return
+    const stationRef = ref(realtimeDb, `live/stations/${activeSession.stationId}`)
+
+    const handleStationUpdate = (snapshot) => {
+      const stationData = snapshot.val()
+      console.log('[Realtime] Station update fired:', stationData)
+      if (stationData && stationData.connectors) {
+        // Lấy trạng thái connector đang sạc trong activeSession
+        const liveConnector = stationData.connectors[activeSession.connectorId]
+        if (liveConnector && liveConnector.txId) {
+          setActiveSession(prev => ({
+            ...prev,
+            energyConsumed: liveConnector.session_kwh || prev.energyConsumed || 0,
+            totalEnergyConsumed: liveConnector.kwh || 0,
+            cost: liveConnector.session_cost || prev.cost || 0,
+            totalCost: liveConnector.costEstimate || 0,
+            currentPower: liveConnector.W_now || 0,
+            connectorStatus: liveConnector.status,
+            lastUpdate: liveConnector.lastUpdate,
+            transactionId: liveConnector.txId,
+            meterValues: {
+              ...prev.meterValues,
+              whTotal: liveConnector.Wh_total || 0,
+              sessionKwh: liveConnector.session_kwh || 0,
+              power: liveConnector.W_now || 0
+            }
+          }))
+        }
+      }
+    }
+
+    onValue(stationRef, handleStationUpdate, (error) => {
+      console.error('Error listening to station updates:', error)
+    })
+
+    return () => {
+      off(stationRef, 'value', handleStationUpdate)
     }
   }, [activeSession?.id, activeSession?.stationId, activeSession?.connectorId, user])
 

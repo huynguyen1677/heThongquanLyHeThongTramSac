@@ -38,6 +38,13 @@ const ChargingSession = () => {
   // Debug log để kiểm tra URL params
   console.log('URL Params - stationId:', stationId, 'connectorId:', connectorId)
 
+  // Nếu không có connectorId, redirect về station list
+  useEffect(() => {
+    if (stationId && !connectorId) {
+      console.log('No connectorId provided, staying on page to show station info')
+    }
+  }, [stationId, connectorId])
+
   // Hàm format thời gian từ giây thành HH:MM:SS
   const formatTime = (seconds) => {
     if (!seconds) return '00:00:00'
@@ -190,7 +197,7 @@ const ChargingSession = () => {
           <h1>Chọn cổng sạc</h1>
         </header>
 
-        {/* Thông tin trạm sạc với trạng thái realtime */}
+        {/* Thông tin trạm sạc */}
         <div className="station-info">
           <h2>{station.name}</h2>
           <div className="station-status">
@@ -204,46 +211,7 @@ const ChargingSession = () => {
             )}
           </div>
           <p>{station.location}</p>
-          
-          {/* Thêm thông tin chi tiết từ realtime */}
-          {realtimeStation && (
-            <div className="station-details">
-              <div className="detail-grid">
-                {realtimeStation.model && (
-                  <div className="detail-item">
-                    <label>Model:</label>
-                    <span>{realtimeStation.model}</span>
-                  </div>
-                )}
-                {realtimeStation.vendor && (
-                  <div className="detail-item">
-                    <label>Vendor:</label>
-                    <span>{realtimeStation.vendor}</span>
-                  </div>
-                )}
-                {realtimeStation.firmwareVersion && (
-                  <div className="detail-item">
-                    <label>Firmware:</label>
-                    <span>{realtimeStation.firmwareVersion}</span>
-                  </div>
-                )}
-                {realtimeStation.serialNumber && (
-                  <div className="detail-item">
-                    <label>Serial:</label>
-                    <span>{realtimeStation.serialNumber}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </div>
-
-        {/* Hiển thị demo realtime data đầy đủ */}
-        {stationId && (
-          <div className="realtime-demo-section">
-            <StationRealtimeDemo stationId={stationId} />
-          </div>
-        )}
 
         {/* Danh sách connectors để chọn - ưu tiên realtime data */}
         <div className="connector-selection">
@@ -315,7 +283,7 @@ const ChargingSession = () => {
                   </li>
                 ))}
               </ul>
-              <p><strong>Realtime connectors:</strong> {JSON.stringify(realtimeConnectors, null, 2)}</p>
+              <p><strong>Connectors structure:</strong> {JSON.stringify(station.connectors, null, 2)}</p>
             </div>
           </details>
           <button onClick={() => navigate('/stations')}>
@@ -466,7 +434,7 @@ const ChargingSession = () => {
             </div>
           </div>
 
-          {/* Hiển thị dữ liệu realtime từ connector - luôn hiển thị */}
+          {/* Hiển thị dữ liệu realtime từ connector - luôn hiển thị nếu có data */}
           <div className="realtime-data">
             <h4>📊 Dữ liệu thời gian thực</h4>
             <div className="realtime-metrics">
