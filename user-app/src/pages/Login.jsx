@@ -13,7 +13,7 @@ const Login = () => {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  
+
   const { login, register } = useAuth()
   const navigate = useNavigate()
 
@@ -41,12 +41,20 @@ const Login = () => {
       } else {
         if (formData.password !== formData.confirmPassword) {
           setError('Mật khẩu xác nhận không khớp')
+          setLoading(false)
           return
         }
-        
         const result = await register(formData.email, formData.password, formData.name, formData.phone)
         if (result.success) {
-          navigate('/')
+          setFormData({
+            email: '',
+            password: '',
+            name: '',
+            phone: '',
+            confirmPassword: ''
+          })
+          setError('')
+          setIsLogin(true)
         } else {
           setError(result.error)
         }
@@ -92,18 +100,31 @@ const Login = () => {
 
               <form onSubmit={handleSubmit}>
                 {!isLogin && (
-                  <div className="mb-4">
-                    <label className="form-label">Họ tên</label>
-                    <input
-                      type="text"
-                      name="name"
-                      value={formData.name}
-                      onChange={handleInputChange}
-                      className="form-input"
-                      required={!isLogin}
-                      placeholder="Nhập họ tên của bạn"
-                    />
-                  </div>
+                  <>
+                    <div className="mb-4">
+                      <label className="form-label">Họ tên</label>
+                      <input
+                        type="text"
+                        name="name"
+                        value={formData.name}
+                        onChange={handleInputChange}
+                        className="form-input"
+                        required={!isLogin}
+                        placeholder="Nhập họ tên của bạn"
+                      />
+                    </div>
+                    <div className="mb-4">
+                      <label className="form-label">Số điện thoại</label>
+                      <input
+                        type="tel"
+                        name="phone"
+                        value={formData.phone}
+                        onChange={handleInputChange}
+                        className="form-input"
+                        placeholder="0901234567"
+                      />
+                    </div>
+                  </>
                 )}
 
                 <div className="mb-4">
@@ -118,20 +139,6 @@ const Login = () => {
                     placeholder="name@example.com"
                   />
                 </div>
-
-                {!isLogin && (
-                  <div className="mb-4">
-                    <label className="form-label">Số điện thoại</label>
-                    <input
-                      type="tel"
-                      name="phone"
-                      value={formData.phone}
-                      onChange={handleInputChange}
-                      className="form-input"
-                      placeholder="0901234567"
-                    />
-                  </div>
-                )}
 
                 <div className="mb-4">
                   <label className="form-label">Mật khẩu</label>

@@ -6,8 +6,9 @@ import {
   onAuthStateChanged,
   updateProfile
 } from 'firebase/auth'
-import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore'
+import { doc, setDoc, getDoc, updateDoc, runTransaction } from 'firebase/firestore'
 import { auth, db } from '../services/firebase'
+import { use } from 'react'
 
 const AuthContext = createContext()
 
@@ -95,28 +96,34 @@ export const AuthProvider = ({ children }) => {
       setLoading(true)
       const userCredential = await createUserWithEmailAndPassword(auth, email, password)
       const firebaseUser = userCredential.user
-      
+
+      // Lấy userId số tự tăng
+      const numericUserId = await getNextUserId()
+
       // Cập nhật displayName
       if (name) {
         await updateProfile(firebaseUser, { displayName: name })
       }
-      
+
       // Lưu thông tin user vào Firestore
       const userData = {
         email,
         name,
         phone: phone || null,
+        role: 'user',
+        userId: numericUserId, // Thêm userId dạng số
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
-      
+
       await setDoc(doc(db, 'users', firebaseUser.uid), userData)
-      
-      return { success: true, user: firebaseUser }
+      console.log('User registered and saved to Firestore:', userData)
+
+      return { success: true, user: firebaseUser, userId: numericUserId }
     } catch (error) {
       console.error('Registration error:', error)
       let errorMessage = 'Đăng ký thất bại'
-      
+
       switch (error.code) {
         case 'auth/email-already-in-use':
           errorMessage = 'Email này đã được sử dụng'
@@ -130,7 +137,7 @@ export const AuthProvider = ({ children }) => {
         default:
           errorMessage = error.message
       }
-      
+
       return { success: false, error: errorMessage }
     } finally {
       setLoading(false)
@@ -175,13 +182,30 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
+  // Hàm lấy số userId mới
+  const getNextUserId = async () => {
+    const counterRef = doc(db, 'counters', 'users')
+    let newId = 100000
+    await runTransaction(db, async (transaction) => {
+      const counterDoc = await transaction.get(counterRef)
+      if (counterDoc.exists()) {
+        newId = counterDoc.data().value + 1
+        transaction.update(counterRef, { value: newId })
+      } else {
+        transaction.set(counterRef, { value: newId })
+      }
+    })
+    return newId
+  }
+
   const value = {
     user,
     loading,
     login,
     register,
     logout,
-    updateProfile
+    updateProfile,
+    getNextUserId
   }
 
   return (

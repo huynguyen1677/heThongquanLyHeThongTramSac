@@ -6,6 +6,7 @@ import ConnectorCard from './components/ConnectorCard';
 import SimulatorActions from './components/SimulatorActions';
 import LogConsole from './components/LogConsole';
 import ChargingHistory from './components/ChargingHistory';
+import { useSafetyCheck } from './hooks/useSafetyCheck';
 import './App.css';
 
 function App() {
@@ -18,7 +19,7 @@ function App() {
   
   const ocppClientRef = useRef(null);
   const chargingHistoryRefs = useRef(new Map());
-
+  
   useEffect(() => {
     // Initialize OCPP client
     ocppClientRef.current = new OcppClient();
@@ -181,28 +182,28 @@ function App() {
       status,
       errorCode,
       timestamp: new Date().toISOString(),
-      info: additionalInfo.info || undefined,
+      info: additionalInfo && additionalInfo.info ? additionalInfo.info : undefined,
       // Thêm metadata cho CSMS để lưu vào Firebase
       ...additionalInfo
     };
 
     try {
       await ocppClientRef.current.sendCall('StatusNotification', payload);
-      
+
       // Update connector state locally
       setConnectors(prev => prev.map(conn => 
         conn.id === connectorId 
           ? { ...conn, status, errorCode, ...additionalInfo }
           : conn
       ));
-      
+
       addLog({
         type: 'log',
         level: 'info',
         message: `📡 StatusNotification sent: Connector ${connectorId} -> ${status}`,
         timestamp: new Date().toISOString()
       });
-      
+
     } catch (error) {
       addLog({
         type: 'log',
@@ -213,6 +214,7 @@ function App() {
       throw error;
     }
   };
+const { performSafetyCheck } = useSafetyCheck(sendStatusNotification, addLog);
 
   const handleLocalStart = async (connectorId, powerKw) => {
     try {
@@ -416,6 +418,12 @@ function App() {
   };
 
   const handleStatusChange = async (connectorId, newStatus, safetyCheckData = null) => {
+    if (newStatus === 'Preparing' && safetyCheckData) {
+      await performSafetyCheck(connectorId, safetyCheckData);
+      // Không cần xử lý thêm ở đây, đã tách ra hook
+      return;
+    }
+
     const additionalInfo = {};
     
     // Nếu chuyển sang Preparing, bao gồm thông tin safety check
