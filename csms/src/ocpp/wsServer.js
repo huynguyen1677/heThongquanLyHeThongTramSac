@@ -339,28 +339,142 @@ export class OcppWebSocketServer {
   }
 
   async handleStartTransaction(stationId, messageId, payload) {
+    logger.info(`🚀 START TRANSACTION DEBUG - Station: ${stationId}, MessageID: ${messageId}`);
+    logger.info(`🚀 START TRANSACTION PAYLOAD:`, JSON.stringify(payload, null, 2));
     logger.info(`StartTransaction from ${stationId}:`, payload);
+    logger.info(`🔍 Received idTag: ${payload.idTag}`);
     
-    // Generate transaction ID
-    const transactionId = Date.now();
-    
-    // Update session
-    await sessions.startTransaction(stationId, payload.connectorId, {
-      transactionId,
-      idTag: payload.idTag,
-      meterStart: payload.meterStart,
-      startTime: payload.timestamp,
-      reservationId: payload.reservationId
-    });
-
-    const response = {
-      transactionId,
-      idTagInfo: {
-        status: 'Accepted'
+    try {
+      // 1. Kiểm tra user có tồn tại trong database không
+      const userExists = await this.checkUserExists(payload.idTag);
+      if (!userExists) {
+        // Reject nếu user không tồn tại
+        const response = {
+          transactionId: 0,
+          idTagInfo: {
+            status: 'Invalid'
+          }
+        };
+        this.sendCallResult(stationId, messageId, response);
+        return;
       }
-    };
 
-    this.sendCallResult(stationId, messageId, response);
+      // 2. Gửi thông báo xác nhận đến User App và chờ phản hồi
+      const userConfirmed = await this.requestUserConfirmation(payload.idTag, stationId, payload.connectorId);
+      
+      if (!userConfirmed) {
+        // User từ chối - Reject transaction
+        const response = {
+          transactionId: 0,
+          idTagInfo: {
+            status: 'Blocked'
+          }
+        };
+        this.sendCallResult(stationId, messageId, response);
+        return;
+      }
+
+      // 3. User đồng ý - Tiếp tục tạo transaction
+      const transactionId = Date.now();
+      
+      // Update session with userId from idTag
+      await sessions.startTransaction(stationId, payload.connectorId, {
+        transactionId,
+        idTag: payload.idTag,
+        userId: payload.idTag,
+        meterStart: payload.meterStart,
+        startTime: payload.timestamp,
+        reservationId: payload.reservationId
+      });
+
+      const response = {
+        transactionId,
+        idTagInfo: {
+          status: 'Accepted'
+        }
+      };
+
+      this.sendCallResult(stationId, messageId, response);
+      
+    } catch (error) {
+      logger.error(`Error processing StartTransaction:`, error);
+      const response = {
+        transactionId: 0,
+        idTagInfo: {
+          status: 'Invalid'
+        }
+      };
+      this.sendCallResult(stationId, messageId, response);
+    }
+  }
+
+  // Helper functions for user confirmation flow
+  async checkUserExists(userId) {
+    try {
+      logger.info(`🔍 Checking if user ${userId} exists...`);
+      
+      // Tạm thời return true để test flow confirmation
+      // TODO: Implement proper Firestore query when ready
+      logger.info(`✅ User ${userId} validation bypassed for testing`);
+      return true;
+      
+    } catch (error) {
+      logger.error(`Error checking user ${userId}:`, error);
+      return false;
+    }
+  }
+
+  async requestUserConfirmation(userId, stationId, connectorId) {
+    try {
+      // Import dynamic để tránh lỗi ES module
+      const { realtimeService } = await import('../services/realtime.js');
+      const confirmationData = {
+        userId,
+        stationId, 
+        connectorId,
+        timestamp: new Date().toISOString(),
+        status: 'pending'
+      };
+
+      logger.info(`[DEBUG] Ghi xác nhận sạc cho userId: ${userId}`, confirmationData);
+      await realtimeService.saveChargingConfirmation(userId, confirmationData);
+      logger.info(`[DEBUG] Đã ghi xác nhận sạc cho userId: ${userId}`);
+
+      // Chờ phản hồi từ user trong 30 giây
+      const confirmed = await this.waitForUserResponse(userId, 30000);
+      return confirmed;
+    } catch (error) {
+      logger.error(`💥 Error requesting user confirmation:`, error && error.stack ? error.stack : error);
+      logger.error(`💥 Error type:`, typeof error);
+      logger.error(`💥 Error constructor:`, error.constructor?.name);
+      logger.error(`💥 Error message:`, error?.message);
+      logger.error(`💥 Error code:`, error?.code);
+      logger.error(`💥 Error details:`, error?.details);
+      logger.error(`💥 Error JSON:`, JSON.stringify(error, null, 2));
+      return false;
+    }
+  }
+
+  async waitForUserResponse(userId, timeoutMs) {
+    return new Promise(async (resolve) => {
+      // Import dynamic để tránh lỗi ES module
+      const { realtimeService } = await import('../services/realtime.js');
+      let timeoutId;
+      let listenerUnsubscribe;
+
+      // Set timeout
+      timeoutId = setTimeout(() => {
+        if (listenerUnsubscribe) listenerUnsubscribe();
+        resolve(false); // Timeout - user didn't respond
+      }, timeoutMs);
+
+      // Listen for user response
+      listenerUnsubscribe = realtimeService.listenForChargingResponse(userId, (response) => {
+        clearTimeout(timeoutId);
+        if (listenerUnsubscribe) listenerUnsubscribe();
+        resolve(response === 'accepted');
+      });
+    });
   }
 
   async handleStopTransaction(stationId, messageId, payload) {

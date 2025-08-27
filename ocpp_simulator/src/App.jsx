@@ -216,77 +216,29 @@ function App() {
   };
 const { performSafetyCheck } = useSafetyCheck(sendStatusNotification, addLog);
 
-  const handleLocalStart = async (connectorId, powerKw) => {
+  const  handleLocalStart = async (connectorId, powerKw, inputUserId) => {
     try {
       const connector = connectors.find(c => c.id === connectorId);
-      if (!connector) {
-        throw new Error('Connector not found');
-      }
+      if (!connector) throw new Error('Connector not found');
 
-      // Kiểm tra trạng thái connector - có thể là Available hoặc Preparing
-      if (!['Available', 'Preparing'].includes(connector.status)) {
-        throw new Error(`Connector not ready for start. Current status: ${connector.status}`);
-      }
-
-      // Nếu chưa ở trạng thái Preparing, chuyển sang Preparing trước
-      if (connector.status === 'Available') {
-        await sendStatusNotification(connectorId, 'Preparing');
-        // Delay ngắn để mô phỏng quá trình chuẩn bị
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-
-      // 2. Tùy chọn: Authorize
-      try {
-        const authResponse = await ocppClientRef.current.sendCall('Authorize', {
-          idTag: 'DEMO_USER'
-        });
-        
-        if (authResponse.idTagInfo.status !== 'Accepted') {
-          throw new Error(`Authorization failed: ${authResponse.idTagInfo.status}`);
-        }
-        
-        addLog({
-          type: 'log',
-          level: 'info',
-          message: `✅ Authorization successful for connector ${connectorId}`,
-          timestamp: new Date().toISOString()
-        });
-      } catch (authError) {
-        addLog({
-          type: 'log',
-          level: 'warn',
-          message: `⚠️ Authorization failed, continuing anyway: ${authError.message}`,
-          timestamp: new Date().toISOString()
-        });
-      }
+      // Ưu tiên remoteIdTag từ backend, nếu không có thì dùng inputUserId từ UI
+      const idTag = ocppClientRef.current.remoteIdTag || inputUserId;
+      if (!idTag) throw new Error('Vui lòng nhập mã xác nhận (userId 6 số) hoặc nhận lệnh từ app!');
 
       // 3. Bắt đầu transaction
-      // Lấy meterStart từ connector hiện tại (tích lũy từ các session trước)
-      const currentConnector = connectors.find(c => c.id === connectorId);
-      const meterStart = currentConnector?.cumulativeMeter || 0; // Sử dụng giá trị tích lũy thay vì random
+      const meterStart = connector.cumulativeMeter || 0;
       
-      const startPayload = {
-        connectorId,
-        idTag: 'DEMO_USER',
-        meterStart,
-        timestamp: new Date().toISOString()
-      };
+      const startResponse = await ocppClientRef.current.sendStartTransaction(connectorId, meterStart, idTag);
 
-      const startResponse = await ocppClientRef.current.sendCall('StartTransaction', startPayload);
-      
-      // 4. Nếu thành công...
       if (startResponse.transactionId) {
-        // 4a. Cập nhật trạng thái connector với transactionId
         setConnectors(prev => prev.map(conn => 
           conn.id === connectorId 
             ? { ...conn, transactionId: startResponse.transactionId, meterStart }
             : conn
         ));
 
-        // 4b. Gửi StatusNotification (Charging)
         await sendStatusNotification(connectorId, 'Charging');
 
-        // Start meter timer
         const meterTimer = meterTimers.get(connectorId);
         if (meterTimer) {
           meterTimer.start(startResponse.transactionId, meterStart, powerKw);
@@ -303,7 +255,6 @@ const { performSafetyCheck } = useSafetyCheck(sendStatusNotification, addLog);
       }
 
     } catch (error) {
-      // 5. Quay về trạng thái Available nếu có lỗi
       await sendStatusNotification(connectorId, 'Available');
       throw error;
     }

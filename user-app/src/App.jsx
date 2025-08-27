@@ -1,6 +1,7 @@
 import React from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import Header from './components/Header'
+import ChargingConfirmationDialog from './components/ChargingConfirmationDialog'
 import Home from './pages/Home'
 import Stations from './pages/Stations'
 import ChargingSession from './pages/ChargingSession'
@@ -29,6 +30,7 @@ function App() {
                 <Route path="/login" element={<Login />} />
               </Routes>
             </main>
+            <ChargingConfirmationDialog />
           </div>
         </Router>
       </ChargingProvider>

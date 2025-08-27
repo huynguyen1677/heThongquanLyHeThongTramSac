@@ -121,7 +121,7 @@ class RealtimeService {
   }
 
   // Bắt đầu transaction - lưu giá trị Wh ban đầu
-  async startTransaction(stationId, connectorId, transactionId, initialWhValue = 0) {
+  async startTransaction(stationId, connectorId, transactionId, initialWhValue = 0, idTag) {
     if (!this.isAvailable()) return false;
 
     try {
@@ -143,6 +143,7 @@ class RealtimeService {
       // Cập nhật connector - GIỮ NGUYÊN Wh_total và kwh tích lũy
       const connectorRef = this.db.ref(`live/stations/${stationId}/connectors/${connectorId}`);
       const updateData = {
+        userId: idTag || null, // <-- Lưu userId (idTag) thay vì txId
         txId: transactionId,
         W_now: 0,
         session_kwh: 0,        // kWh của phiên hiện tại (để tracking riêng)
@@ -160,7 +161,7 @@ class RealtimeService {
 
       await connectorRef.update(updateData);
 
-      logger.info(`Transaction started: ${stationId}/${connectorId} -> ${transactionId}, startWh: ${initialWhValue}`);
+      logger.info(`Transaction started: ${stationId}/${connectorId} -> ${transactionId}, startWh: ${initialWhValue}, userId: ${userId || 'N/A'}`);
       return true;
     } catch (error) {
       logger.error('Error starting transaction:', error);
@@ -714,6 +715,54 @@ class RealtimeService {
     }).catch(error => {
       logger.debug('SyncService not available:', error.message);
     });
+  }
+
+  // User confirmation functions for charging requests
+  async saveChargingConfirmation(userId, confirmationData) {
+    if (!this.isAvailable()) {
+      logger.error('❌ Realtime Database not available');
+      return false;
+    }
+    try {
+      logger.info(`📝 Attempting to save charging confirmation for user: ${userId}`);
+      logger.info(`📝 Data:`, confirmationData);
+      logger.info(`📝 Path: chargingRequests/${userId}`);
+      
+      await this.db.ref(`chargingRequests/${userId}`).set(confirmationData);
+      
+      logger.info(`✅ Successfully saved charging confirmation for user: ${userId}`);
+      return true;
+    } catch (error) {
+      logger.error('❌ Error saving charging confirmation:', error);
+      logger.error('❌ Error details:', error.message);
+      logger.error('❌ Error stack:', error.stack);
+      throw error;
+    }
+  }
+
+  listenForChargingResponse(userId, callback) {
+    if (!this.isAvailable()) {
+      logger.error('Firebase Realtime Database not available');
+      return null;
+    }
+
+    const path = `chargingRequests/${userId}/status`;
+    const ref = this.db.ref(path);
+    
+    const listener = ref.on('value', (snapshot) => {
+      const status = snapshot.val();
+      if (status && status !== 'pending') {
+        callback(status);
+      }
+    });
+    
+    logger.info(`👂 Listening for charging response from user ${userId}`);
+    
+    // Return unsubscribe function
+    return () => {
+      ref.off('value', listener);
+      logger.info(`🚫 Stopped listening for user ${userId} response`);
+    };
   }
 }
 

@@ -298,8 +298,8 @@ class SessionManager {
     connector.currentTransaction = transaction.id;
     connector.status = CONNECTOR_STATUS.CHARGING;
 
-    // Cập nhật transaction ID trong realtime
-    await realtimeService.updateConnectorTransaction(stationId, connectorId, transaction.id, transactionData.meterStart);
+    // Cập nhật transaction ID và userId trong realtime
+    await realtimeService.startTransaction(stationId, connectorId, transaction.id, transactionData.meterStart, transactionData.userId);
     await realtimeService.updateConnectorStatus(stationId, connectorId, {
       status: CONNECTOR_STATUS.CHARGING,
       errorCode: 'NoError',

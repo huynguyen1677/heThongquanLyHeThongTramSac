@@ -104,37 +104,6 @@ const ConnectorCard = ({
     }
   };
 
-  const handleConfirmCode = async () => {
-    if (preCheck.confirmationCode === '1234') {
-      const newPreCheck = { ...preCheck, confirmed: true };
-      setPreCheck(newPreCheck);
-      
-      // Kiểm tra xem tất cả safety check đã hoàn thành chưa
-      if (newPreCheck.parked && newPreCheck.plugged && newPreCheck.confirmed && status === 'Available') {
-        try {
-          console.log(`🔒 All safety checks completed for connector ${connectorId}:`, newPreCheck);
-          
-          // Ngay lập tức chuyển sang Preparing và gửi qua CSMS
-          await onStatusChange(connectorId, 'Preparing', newPreCheck);
-          
-          console.log(`✅ Connector ${connectorId} moved to Preparing status`);
-        } catch (error) {
-          console.error(`❌ Error updating status to Preparing:`, error);
-          alert(`Lỗi khi cập nhật trạng thái: ${error.message}`);
-        }
-      }
-    } else {
-      alert('Mã xác nhận không đúng! Sử dụng: 1234');
-    }
-  };
-
-  const isReadyToStart = () => {
-    // Có thể bắt đầu sạc khi ở trạng thái Preparing (đã qua safety check) hoặc Available (với đầy đủ safety check)
-    return ((status === 'Preparing') || 
-            (status === 'Available' && preCheck.parked && preCheck.plugged && preCheck.confirmed)) &&
-           isConnected;
-  };
-
   const canStop = () => {
     return status === 'Charging' && transactionId && isConnected;
   };
@@ -153,26 +122,19 @@ const ConnectorCard = ({
   };
 
   const handleLocalStart = async () => {
-    if (!isReadyToStart()) {
-      alert('Vui lòng hoàn thành tất cả các kiểm tra an toàn trước khi bắt đầu sạc!');
+    // Kiểm tra ID Tag đã nhập chưa
+    if (!preCheck.confirmationCode || preCheck.confirmationCode.length !== 6) {
+      alert('Vui lòng nhập User ID (6 số) trước khi bắt đầu sạc!');
       return;
     }
 
     try {
-      console.log(`� Starting charging process for connector ${connectorId} (current status: ${status})`);
+      console.log(`🚀 Starting charging for connector ${connectorId} with User ID: ${preCheck.confirmationCode}`);
       
-      // Nếu chưa ở trạng thái Preparing, chuyển sang Preparing trước
-      if (status === 'Available') {
-        console.log(`🔒 Moving to Preparing status first...`);
-        await onStatusChange(connectorId, 'Preparing', preCheck);
-        // Delay ngắn để mô phỏng quá trình chuẩn bị
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
+      // Gửi StartTransaction trực tiếp với ID Tag
+      await onLocalStart(connectorId, powerKw, preCheck.confirmationCode);
       
-      // Bắt đầu quá trình sạc - CSMS sẽ nhận và cập nhật Firebase
-      await onLocalStart(connectorId, powerKw);
-      
-      console.log(`✅ Charging process initiated for connector ${connectorId}`);
+      console.log(`✅ Charging request sent for connector ${connectorId}`);
     } catch (error) {
       console.error(`❌ Error starting charge for connector ${connectorId}:`, error);
       alert(`Lỗi khi bắt đầu sạc: ${error.message}`);
@@ -309,47 +271,18 @@ const ConnectorCard = ({
         {getStatusBadge()}
       </div>
 
-      {/* Pre-check Section */}
-      <div className="pre-check-section">
-        <h4>✅ Kiểm tra an toàn</h4>
-        <div className="pre-check-items">
-          <label className="checkbox-item">
-            <input
-              type="checkbox"
-              checked={preCheck.parked}
-              onChange={(e) => handlePreCheckChange('parked', e.target.checked)}
-              disabled={status !== 'Available'}
-            />
-            🚗 Xe đã đỗ đúng vị trí
-          </label>
-
-          <label className="checkbox-item">
-            <input
-              type="checkbox"
-              checked={preCheck.plugged}
-              onChange={(e) => handlePreCheckChange('plugged', e.target.checked)}
-              disabled={status !== 'Available'}
-            />
-            🔌 Đã cắm dây sạc
-          </label>
-
-          <div className="confirmation-code">
-            <input
-              type="text"
-              placeholder="Mã xác nhận (1234)"
-              value={preCheck.confirmationCode}
-              onChange={(e) => handlePreCheckChange('confirmationCode', e.target.value)}
-              disabled={status !== 'Available' || preCheck.confirmed}
-              maxLength={4}
-            />
-            <button
-              onClick={handleConfirmCode}
-              disabled={status !== 'Available' || preCheck.confirmed || preCheck.confirmationCode.length !== 4}
-              className="btn btn-small"
-            >
-              {preCheck.confirmed ? '✅ Đã xác nhận' : 'Xác nhận'}
-            </button>
-          </div>
+      {/* Simple ID Tag Input */}
+      <div className="id-tag-section">
+        <h4>🏷️ Nhập ID Tag (User ID)</h4>
+        <div className="id-tag-input">
+          <input
+            type="text"
+            placeholder="Nhập User ID (6 số)"
+            value={preCheck.confirmationCode}
+            onChange={(e) => handlePreCheckChange('confirmationCode', e.target.value.replace(/\D/g, '').slice(0, 6))}
+            disabled={status !== 'Available'}
+            maxLength={6}
+          />
         </div>
       </div>
 
@@ -413,9 +346,9 @@ const ConnectorCard = ({
           <button
             className="btn btn-success"
             onClick={handleLocalStart}
-            disabled={!isReadyToStart()}
+            disabled={status !== 'Available' || !preCheck.confirmationCode || preCheck.confirmationCode.length !== 6}
           >
-            🚀 Bắt đầu sạc (Local)
+            🚀 Bắt đầu sạc
           </button>
 
           <button
@@ -502,6 +435,13 @@ const ConnectorCard = ({
             <div className="info-item">
               <label>Giá ước tính:</label>
               <span>{stats.estimatedCost} ₫</span>
+            </div>
+            <div className="info-item">
+              <label>User đang sạc:</label>
+              <span>
+                {/* Ưu tiên lấy idTag từ transaction, nếu không có thì lấy từ preCheck */}
+                {stats.idTag || preCheck.confirmationCode || 'N/A'}
+              </span>
             </div>
           </div>
         </div>

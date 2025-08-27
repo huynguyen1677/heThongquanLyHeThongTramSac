@@ -19,7 +19,9 @@ const ChargingSession = () => {
     startCharging, 
     stopCharging, 
     loading, 
-    error 
+    error,
+    confirmationRequest,
+    respondToConfirmationRequest
   } = useCharging()
 
   // Hook để lắng nghe realtime data của trạm cụ thể
@@ -653,8 +655,34 @@ const ChargingSession = () => {
           </div>
         </div>
       )}
+
+      {/* Popup xác nhận sạc từ CSMS */}
+      <ChargingConfirmationDialog
+        confirmationRequest={confirmationRequest}
+        onRespond={respondToConfirmationRequest}
+      />
     </div>
   )
+}
+
+// Thêm component dialog xác nhận ở cuối file
+function ChargingConfirmationDialog({ confirmationRequest, onRespond }) {
+  if (!confirmationRequest) return null;
+  return (
+    <div className="modal-overlay">
+      <div className="modal">
+        <h3>Yêu cầu xác nhận sạc</h3>
+        <p>
+          Trạm <b>{confirmationRequest.stationId}</b> - Cổng <b>{confirmationRequest.connectorId}</b> muốn bắt đầu sạc.<br />
+          Bạn có đồng ý không?
+        </p>
+        <div className="modal-actions">
+          <button onClick={() => onRespond(true)} className="start-button">Đồng ý</button>
+          <button onClick={() => onRespond(false)} className="stop-button">Từ chối</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default ChargingSession

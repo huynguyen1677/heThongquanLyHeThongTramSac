@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { collection, query, where, orderBy, limit, onSnapshot, doc, addDoc, updateDoc } from 'firebase/firestore'
-import { ref, onValue, off } from 'firebase/database'
+import { ref, onValue, off, update } from 'firebase/database'
 import { db, realtimeDb } from '../services/firebase'
 import { useAuth } from './AuthContext'
 import apiService from '../services/api'
@@ -23,6 +23,7 @@ export const ChargingProvider = ({ children }) => {
   const [chargingHistory, setChargingHistory] = useState([])
   const [loading, setLoading] = useState(false)
   const [pricePerKwh, setPricePerKwh] = useState(3500)
+  const [confirmationRequest, setConfirmationRequest] = useState(null)
   const { user } = useAuth()
 
 
@@ -56,6 +57,33 @@ export const ChargingProvider = ({ children }) => {
 
     return () => unsubscribe()
   }, [user])
+
+  // Listen for charging confirmation requests
+  useEffect(() => {
+    if (!user || !user.userId) {
+      setConfirmationRequest(null)
+      return
+    }
+
+    const confirmationRef = ref(realtimeDb, `chargingRequests/${user.userId}`)
+    
+    const unsubscribe = onValue(confirmationRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val()
+        console.log('🔔 Received confirmation request:', data)
+        if (data.status === 'pending') {
+          setConfirmationRequest(data)
+        } else {
+          setConfirmationRequest(null)
+        }
+      } else {
+        setConfirmationRequest(null)
+      }
+    })
+
+    console.log(`👂 Listening for confirmation requests at: chargingRequests/${user.userId}`)
+    return () => off(confirmationRef, 'value', unsubscribe)
+  }, [user?.userId])
 
   // Load price per kWh và lắng nghe thay đổi
   useEffect(() => {
@@ -311,7 +339,8 @@ export const ChargingProvider = ({ children }) => {
       const session = { id: sessionDoc.id, ...sessionData }
 
       // Gửi lệnh start charging đến CSMS qua API
-      const idTag = user.id // Sử dụng user ID làm idTag
+      const idTag = user.userId?.toString() // Đảm bảo là 6 số dạng chuỗi
+      if (!idTag) throw new Error('Không tìm thấy userId')
       await apiService.startCharging(stationId, connectorId, idTag)
 
       setActiveSession(session)
@@ -375,15 +404,46 @@ export const ChargingProvider = ({ children }) => {
     }
   }, [])
 
+  // Respond to charging confirmation request
+  const respondToConfirmationRequest = useCallback(async (approved) => {
+    console.log('🔥 respondToConfirmationRequest called with:', approved)
+    console.log('🔥 confirmationRequest:', confirmationRequest)
+    console.log('🔥 user.userId:', user?.userId)
+    
+    if (!confirmationRequest || !user?.userId) {
+      console.log('❌ Missing confirmationRequest or userId')
+      return
+    }
+
+    try {
+      console.log(`📤 Responding to confirmation: ${approved ? 'ACCEPTED' : 'DENIED'}`)
+      const confirmationRef = ref(realtimeDb, `chargingRequests/${user.userId}`)
+      console.log('📤 Firebase path:', `chargingRequests/${user.userId}`)
+      
+      await update(confirmationRef, {
+        status: approved ? 'accepted' : 'denied',  // ✅ Sửa: 'accepted' thay vì 'approved'
+        responseTime: Date.now()
+      })
+      
+      console.log('✅ Response sent successfully to Firebase')
+      // Clear local confirmation request
+      setConfirmationRequest(null)
+    } catch (error) {
+      console.error('❌ Error responding to confirmation request:', error)
+    }
+  }, [confirmationRequest, user?.userId])
+
   const value = {
     stations,
     activeSession,
     chargingHistory,
     loading,
     pricePerKwh,
+    confirmationRequest,
     startCharging,
     stopCharging,
-    refreshStations
+    refreshStations,
+    respondToConfirmationRequest
   }
 
   return (
