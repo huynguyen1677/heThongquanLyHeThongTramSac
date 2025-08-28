@@ -98,7 +98,9 @@ export const AuthProvider = ({ children }) => {
       const firebaseUser = userCredential.user
 
       // Lấy userId số tự tăng
-      const numericUserId = await getNextUserId()
+      let numericUserId = await getNextUserId()
+      // Format thành chuỗi 6 số, thêm số 0 ở đầu nếu cần
+      const userId = numericUserId.toString().padStart(6, '0')
 
       // Cập nhật displayName
       if (name) {
@@ -111,7 +113,7 @@ export const AuthProvider = ({ children }) => {
         name,
         phone: phone || null,
         role: 'user',
-        userId: numericUserId, // Thêm userId dạng số
+        userId, // Lưu userId dạng chuỗi 6 số
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
@@ -119,7 +121,7 @@ export const AuthProvider = ({ children }) => {
       await setDoc(doc(db, 'users', firebaseUser.uid), userData)
       console.log('User registered and saved to Firestore:', userData)
 
-      return { success: true, user: firebaseUser, userId: numericUserId }
+      return { success: true, user: firebaseUser, userId }
     } catch (error) {
       console.error('Registration error:', error)
       let errorMessage = 'Đăng ký thất bại'
