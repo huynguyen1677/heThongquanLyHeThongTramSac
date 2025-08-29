@@ -1,229 +1,81 @@
-# EV Charging User App
+# EV Charging Station React App - UI Design & Development Guide
 
-Ứng dụng web dành cho người dùng cuối để sạc xe điện và quản lý phiên sạc.
+## 1. Tổng quan giao diện
 
-## 🚀 Tính năng chính
+Ứng dụng cung cấp trải nghiệm tìm kiếm, theo dõi, quản lý và sử dụng trạm sạc xe điện hiện đại, thân thiện với người dùng. Giao diện sử dụng **React**, hiện đại, dễ mở rộng.
 
-### Cho người dùng cuối:
-- **Tìm trạm sạc**: Xem danh sách trạm sạc có sẵn với thông tin chi tiết
-- **Chọn cổng sạc**: Xem trạng thái từng cổng sạc (có sẵn, đang sạc, không khả dụng)
-- **Bắt đầu sạc**: Khởi tạo phiên sạc với tùy chọn mục tiêu năng lượng
-- **Theo dõi real-time**: Xem tiến trình sạc, năng lượng tiêu thụ, chi phí
-- **Dừng sạc**: Kết thúc phiên sạc khi cần
-- **Lịch sử sạc**: Xem lại các phiên sạc đã thực hiện
-- **Quản lý tài khoản**: Cập nhật thông tin cá nhân
+## 2. Cấu trúc giao diện chính
 
-### Tích hợp:
-- **Firebase Authentication**: Đăng nhập/đăng ký an toàn
-- **Firestore**: Lưu trữ dữ liệu phiên sạc và thông tin user
-- **Firebase Realtime Database**: Cập nhật trạng thái real-time
-- **CSMS API**: Kết nối với hệ thống quản lý trạm sạc
+- **Header**: Thanh tiêu đề cố định, hiển thị tên màn hình, nút menu (mobile), avatar người dùng.
+- **Sidebar**: Menu điều hướng các màn hình chính (Trang chủ, Tìm trạm, Lịch sử, Cài đặt), hỗ trợ cả desktop và mobile.
+- **Main Content**: Hiển thị nội dung theo từng màn hình (Home, Find Station, Station Detail, Charging, History, Settings).
+- **MapView**: Bản đồ mô phỏng vị trí các trạm sạc, marker tương tác, popup thông tin trạm.
+- **Station List**: Danh sách trạm sạc dạng card, lọc theo trạng thái, loại đầu sạc, công suất.
+- **Station Detail**: Thông tin chi tiết trạm, danh sách đầu sạc, trạng thái, giá, QR code, bắt đầu sạc.
+- **Charging Session**: Màn hình mô phỏng quá trình sạc, hiển thị thời gian, năng lượng, công suất, chi phí dự tính.
+- **History**: Lịch sử các phiên sạc, thống kê nhanh, chi tiết từng giao dịch.
+- **Settings**: Quản lý hồ sơ, tuỳ chọn ứng dụng, thông báo, bảo mật.
 
-## 🛠️ Công nghệ sử dụng
+## 3. Ý tưởng thiết kế
 
-- **Frontend**: React 18 với Vite
-- **Routing**: React Router DOM
-- **State Management**: React Context API
-- **Styling**: CSS thuần túy (không dùng thư viện CSS)
-- **Database**: Firebase Firestore & Realtime Database
-- **Authentication**: Firebase Auth
-- **HTTP Client**: Axios
-- **Date Handling**: date-fns
+- **Hiện đại, trực quan**: Sử dụng gradient, card, icon, badge trạng thái, hiệu ứng hover, pulse animation.
+- **Responsive**: Tối ưu cho cả desktop và mobile, sidebar ẩn/hiện linh hoạt.
+- **Tách biệt chức năng**: Mỗi màn hình/component đảm nhận một nhiệm vụ rõ ràng.
+- **Dễ mở rộng**: Có thể thêm mới màn hình, component, tính năng mà không ảnh hưởng phần còn lại.
 
-## 📦 Cài đặt và chạy
+## 4. Các thành phần UI chính
 
-### 1. Cài đặt dependencies
-```bash
-cd user-app
-npm install
-```
+- **StatusBadge**: Hiển thị trạng thái online/offline, trạng thái đầu sạc.
+- **MapView**: Hiển thị marker trạm sạc, popup thông tin, hiệu ứng chọn trạm.
+- **HomeScreen**: Hero section, quick access, thống kê nhanh, mẹo an toàn, giá điện.
+- **FindStationScreen**: Tìm kiếm, lọc, chuyển đổi giữa bản đồ và danh sách.
+- **StationDetailScreen**: Thông tin trạm, bảng giá, QR code, danh sách đầu sạc, bắt đầu sạc.
+- **ChargingScreen**: Mô phỏng quá trình sạc, timeline, đồng hồ, biểu đồ công suất, chi phí.
+- **HistoryScreen**: Thống kê, danh sách lịch sử sạc, bộ lọc.
+- **SettingsScreen**: Hồ sơ, tuỳ chọn, thông báo, bảo mật.
 
-### 2. Cấu hình Firebase
-Tạo file `.env` từ `.env.example` và cập nhật thông tin Firebase:
+## 5. Định hướng phát triển giao diện
 
-```env
-VITE_FIREBASE_API_KEY=your_api_key_here
-VITE_FIREBASE_AUTH_DOMAIN=your_project_id.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=your_project_id
-VITE_FIREBASE_STORAGE_BUCKET=your_project_id.appspot.com
-VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
-VITE_FIREBASE_APP_ID=your_app_id
-VITE_FIREBASE_DATABASE_URL=https://your_project_id-default-rtdb.asia-southeast1.firebasedatabase.app
-VITE_API_BASE_URL=http://localhost:3001/api
-```
+### a. **Chuẩn hoá cấu trúc thư mục**
+- `src/components/`: Các component tái sử dụng (StatusBadge, MapView, StationCard, ChargingDialog, ...)
+- `src/pages/`: Các màn hình chính (Home, FindStation, StationDetail, Charging, History, Settings)
+- `src/contexts/`: Context quản lý state toàn cục (Auth, Charging, ...)
+- `src/services/`: Giao tiếp backend, firebase, utils
+- `src/styles/`: CSS/SCSS module hoặc styled-components
 
-### 3. Khởi chạy ứng dụng
-```bash
-npm run dev
-```
+### b. **Tách nhỏ component**
+- Tách từng phần UI thành component nhỏ, dễ bảo trì, tái sử dụng.
+- Ví dụ: StationCard, ConnectorList, PriceBox, PowerChart, Modal, ...
 
-Ứng dụng sẽ chạy tại `http://localhost:3003`
+### c. **Chuẩn hoá style**
+- Sử dụng TailwindCSS hoặc CSS module cho từng component.
+- Định nghĩa theme màu, font, spacing, shadow, hiệu ứng.
 
-## 🏗️ Cấu trúc dự án
+### d. **Tối ưu responsive**
+- Kiểm tra trên nhiều thiết bị, breakpoint.
+- Sidebar, header, modal, popup đều phải tối ưu cho mobile.
 
-```
-user-app/
-├── src/
-│   ├── components/          # Shared components
-│   │   └── Header.jsx      # Navigation header
-│   ├── contexts/           # React contexts
-│   │   ├── AuthContext.jsx # Authentication state
-│   │   └── ChargingContext.jsx # Charging state
-│   ├── pages/              # Page components
-│   │   ├── Home.jsx        # Trang chủ
-│   │   ├── Stations.jsx    # Danh sách trạm sạc
-│   │   ├── ChargingSession.jsx # Chi tiết phiên sạc
-│   │   ├── History.jsx     # Lịch sử sạc
-│   │   ├── Profile.jsx     # Thông tin tài khoản
-│   │   └── Login.jsx       # Đăng nhập/đăng ký
-│   ├── services/           # External services
-│   │   ├── firebase.js     # Firebase configuration
-│   │   └── api.js          # API service
-│   ├── App.jsx             # Main App component
-│   ├── main.jsx            # Entry point
-│   └── index.css           # Global styles
-├── index.html              # HTML template
-├── package.json            # Dependencies
-├── vite.config.js          # Vite configuration
-└── .env.example            # Environment variables template
-```
+### e. **Mở rộng tính năng**
+- Tích hợp bản đồ thực tế (Leaflet, Google Maps, Mapbox).
+- Lấy dữ liệu trạm sạc từ backend/Firebase thay vì mock.
+- Thêm chức năng đặt lịch sạc, đánh giá trạm, thông báo push.
+- Tích hợp xác thực, quản lý tài khoản, phân quyền.
+- Thêm dark/light mode, đa ngôn ngữ.
 
-## 🎯 Luồng hoạt động
+### f. **Tối ưu trải nghiệm người dùng**
+- Loading skeleton, trạng thái rỗng, thông báo lỗi/thành công.
+- Hiệu ứng chuyển màn hình, animation khi thao tác.
 
-### 1. Đăng nhập/Đăng ký
-- User đăng ký/đăng nhập qua Firebase Auth
-- Thông tin user được lưu trong Firestore
-- Context cập nhật global state
+## 6. Gợi ý mở rộng
 
-### 2. Tìm trạm sạc
-- Load danh sách trạm từ CSMS API
-- Real-time updates từ Firebase Realtime Database
-- Filter theo trạng thái, loại sạc, vị trí
+- **Admin dashboard**: Quản lý trạm, người dùng, thống kê.
+- **Realtime update**: Sử dụng websocket hoặc Firebase realtime để cập nhật trạng thái trạm, phiên sạc.
+- **Tích hợp thanh toán**: Thêm màn hình thanh toán, quản lý hoá đơn.
+- **API documentation**: Tài liệu hoá API backend cho mobile/web.
 
-### 3. Bắt đầu sạc
-- Chọn trạm và cổng sạc
-- Tạo phiên sạc trong Firestore
-- Gửi lệnh start charging đến CSMS
-- Real-time tracking qua Firebase
+---
 
-### 4. Theo dõi phiên sạc
-- Hiển thị năng lượng, thời gian, chi phí real-time
-- Progress bar dựa trên mục tiêu năng lượng
-- Cập nhật từ CSMS qua Realtime Database
+## 7. Kết luận
 
-### 5. Kết thúc sạc
-- Gửi lệnh stop charging đến CSMS
-- Cập nhật trạng thái phiên sạc trong Firestore
-- Chuyển hướng đến lịch sử
-
-## 🔥 Firebase Collections
-
-### users
-```javascript
-{
-  email: string,
-  name: string,
-  phone: string,
-  createdAt: timestamp,
-  updatedAt: timestamp
-}
-```
-
-### chargingSessions
-```javascript
-{
-  userId: string,
-  userEmail: string,
-  userName: string,
-  stationId: string,
-  stationName: string,
-  stationAddress: string,
-  connectorId: number,
-  connectorType: string,
-  power: number,
-  pricePerKwh: number,
-  startTime: timestamp,
-  endTime: timestamp,
-  status: string, // 'Charging', 'Completed', 'Cancelled', 'Failed'
-  energyConsumed: number,
-  estimatedCost: number,
-  duration: number,
-  targetEnergy: number,
-  paymentMethod: string,
-  transactionId: string
-}
-```
-
-## 📱 Responsive Design
-
-- Mobile-first approach
-- Breakpoints: 640px (sm), 768px (md), 1024px (lg)
-- Touch-friendly interface
-- Accessible navigation
-
-## 🔒 Bảo mật
-
-- Firebase Authentication
-- API requests với authentication headers
-- Input validation
-- XSS protection
-- HTTPS only in production
-
-## 🚦 API Integration
-
-Kết nối với CSMS API endpoints:
-- `GET /api/stations` - Lấy danh sách trạm
-- `POST /api/stations/:id/start` - Bắt đầu sạc
-- `POST /api/stations/:id/stop` - Dừng sạc
-- `GET /api/chargingSessions/user/:id` - Lịch sử sạc
-
-## 🔄 Real-time Updates
-
-Sử dụng Firebase Realtime Database để:
-- Cập nhật trạng thái trạm sạc
-- Theo dõi phiên sạc real-time
-- Đồng bộ dữ liệu giữa các thiết bị
-
-## 📈 Performance
-
-- Code splitting với React.lazy
-- Optimized re-renders với useMemo/useCallback
-- Efficient Firebase queries
-- Image optimization
-- Minimal bundle size với Vite
-
-## 🧪 Testing
-
-```bash
-# Run linting
-npm run lint
-
-# Build for production
-npm run build
-
-# Preview production build
-npm run preview
-```
-
-## 🚀 Deployment
-
-1. Build ứng dụng:
-```bash
-npm run build
-```
-
-2. Deploy `dist/` folder lên hosting service (Netlify, Vercel, Firebase Hosting)
-
-3. Cấu hình environment variables trên hosting platform
-
-## 🤝 Contributing
-
-1. Fork repository
-2. Create feature branch
-3. Make changes
-4. Test thoroughly
-5. Submit pull request
-
-## 📄 License
-
-MIT License - xem file LICENSE để biết chi tiết.
+Giao diện hiện tại đã có nền tảng tốt, hiện đại, dễ mở rộng.  
+**Hãy tiếp tục phát triển theo hướng component-based, chuẩn hoá style, tối ưu responsive và bổ sung tính năng thực tế để xây dựng hệ thống quản lý trạm sạc xe điện chuyên nghiệp, thân thiện.

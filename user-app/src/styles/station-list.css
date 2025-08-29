@@ -1,0 +1,103 @@
+.station-list-wrapper {
+  max-width: 900px;
+  margin: 0 auto;
+}
+.station-list-title {
+  text-align: center;
+  margin: 24px 0;
+  font-size: 1.3rem;
+  color: #2563eb;
+}
+.station-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  justify-content: center;
+}
+.station-card {
+  min-width: 320px;
+  max-width: 380px;
+  flex: 1 1 340px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  padding: 20px;
+  margin-bottom: 16px;
+  transition: box-shadow 0.2s;
+  position: relative;
+}
+.station-card-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.station-status {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  margin-right: 10px;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px #eee;
+}
+.station-status.online { background: #4caf50; }
+.station-status.offline { background: #f44336; }
+.station-card-name {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+.station-card-address,
+.station-card-status,
+.station-card-connectors {
+  color: #757575;
+  margin-bottom: 8px;
+}
+.station-card-status .online { color: #4caf50; font-weight: 500; }
+.station-card-status .offline { color: #f44336; font-weight: 500; }
+.station-card-connector-list {
+  margin-top: 10px;
+}
+.station-card-connector-tip {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 8px;
+}
+.connector-list {
+  padding-left: 18px;
+  margin: 0;
+}
+.connector-item {
+  margin-bottom: 6px;
+  background: #f5f5f5;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: background 0.2s, border 0.2s;
+  border: 1px solid transparent;
+}
+.connector-item:hover {
+  background: #e3f2fd;
+  border-color: #2196f3;
+}
+.connector-name {
+  font-weight: 500;
+}
+.connector-status.available { color: #4caf50; font-weight: 500; }
+.connector-status.charging { color: #2196f3; font-weight: 500; }
+.connector-status.unknown { color: #ff9800; font-weight: 500; }
+.connector-update {
+  color: #999;
+  margin-left: 8px;
+  font-size: 12px;
+}
+.connector-detail {
+  font-size: 13px;
+  color: #555;
+  margin-top: 4px;
+}
+.station-card-extra {
+  margin-top: 10px;
+  color: #999;
+  font-size: 13px;
+}

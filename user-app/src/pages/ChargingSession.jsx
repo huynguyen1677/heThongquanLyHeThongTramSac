@@ -2,11 +2,9 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useCharging } from '../contexts/ChargingContext'
-import { useStationRealtime } from '../hooks/useStationRealtime'
 import { format } from 'date-fns'
 import { vi } from 'date-fns/locale'
 import './ChargingSession.css'
-import StationRealtimeDemo from '../components/StationRealtimeDemo'
 
 const ChargingSession = () => {
   const { user } = useAuth()

@@ -1,0 +1,12 @@
+/* Reset và biến màu */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --primary: #2563eb;
+  --gray: #f3f4f6;
+  /* ... */
+}
+body {
+  font-family: 'Segoe UI', Arial, sans-serif;
+  background: var(--gray);
+  color: #222;
+}

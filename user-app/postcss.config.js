@@ -1,1 +1,5 @@
-// Không sử dụng PostCSS - file này có thể xóa
+module.exports = {
+  plugins: {
+    autoprefixer: {},
+  },
+}

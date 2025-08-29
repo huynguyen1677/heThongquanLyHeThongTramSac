@@ -5,7 +5,7 @@ import { useCharging } from '../contexts/ChargingContext'
 import { format } from 'date-fns'
 import { vi } from 'date-fns/locale'
 
-const History = () => {
+function History() {
   const { user } = useAuth()
   const { chargingHistory, loading } = useCharging()
   

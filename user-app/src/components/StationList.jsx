@@ -1,63 +1,45 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { useCharging } from "../contexts/ChargingContext";
+import useStations from "../contexts/useStations";
+import "../styles/station-list.css";
 
-const statusColor = (online) => (online ? "#4caf50" : "#f44336");
-
-function StationList() {
-  const { stations, loading } = useCharging();
+function StationList({ stations: propStations, title }) {
   const navigate = useNavigate();
+  // Nếu không truyền prop, tự lấy từ hook
+  const { stations: contextStations, loading, error } = useStations();
 
-  if (loading) return <div>Đang tải...</div>;
+  // Ưu tiên dùng prop, nếu không có thì dùng context
+  const stations = propStations || contextStations;
+
+  if ((loading && !propStations)) return <div>Đang tải...</div>;
+  if (error && !propStations) return <div style={{ color: "red" }}>{error}</div>;
+  if (!stations || stations.length === 0) return <div>Không có trạm nào.</div>;
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto" }}>
-      <h2 style={{ textAlign: "center", margin: "24px 0" }}>Danh sách trạm sạc</h2>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 24, justifyContent: "center" }}>
+    <div className="station-list-wrapper">
+      <h2 className="station-list-title">{title || "Danh sách trạm sạc"}</h2>
+      <div className="station-list">
         {stations.map(station => (
-          <div
-            key={station.id}
-            style={{
-              minWidth: 320,
-              maxWidth: 380,
-              flex: "1 1 340px",
-              background: "#fff",
-              border: "1px solid #e0e0e0",
-              borderRadius: 16,
-              boxShadow: "0 2px 8px rgba(0,0,0,0.07)",
-              padding: 20,
-              marginBottom: 16,
-              transition: "box-shadow 0.2s",
-              position: "relative"
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
+          <div key={station.id} className="station-card">
+            <div className="station-card-header">
               <div
-                style={{
-                  width: 14,
-                  height: 14,
-                  borderRadius: "50%",
-                  background: statusColor(station.online),
-                  marginRight: 10,
-                  border: "2px solid #fff",
-                  boxShadow: "0 0 0 2px #eee"
-                }}
+                className={`station-status ${station.online ? "online" : "offline"}`}
                 title={station.online ? "Online" : "Offline"}
               />
-              <h3 style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>
+              <h3 className="station-card-name">
                 {station.stationName || station.name || station.id || "Không có tên"}
               </h3>
             </div>
-            <div style={{ color: "#757575", marginBottom: 8 }}>
+            <div className="station-card-address">
               <strong>Địa chỉ:</strong> {station.address || "Chưa cập nhật"}
             </div>
-            <div style={{ marginBottom: 8 }}>
+            <div className="station-card-status">
               <strong>Trạng thái:</strong>{" "}
-              <span style={{ color: statusColor(station.online), fontWeight: 500 }}>
+              <span className={station.online ? "online" : "offline"}>
                 {station.status || (station.online ? "Online" : "Offline")}
               </span>
             </div>
-            <div style={{ marginBottom: 8 }}>
+            <div className="station-card-connectors">
               <strong>Số cổng sạc:</strong>{" "}
               {Array.isArray(station.connectors)
                 ? station.connectors.length
@@ -67,66 +49,41 @@ function StationList() {
             </div>
             {/* Hiển thị connectors */}
             {station.connectors && (
-              <div style={{ marginTop: 10 }}>
+              <div className="station-card-connector-list">
                 <strong>Connectors:</strong>
-                <div style={{ fontSize: 12, color: "#666", marginBottom: 8 }}>
+                <div className="station-card-connector-tip">
                   💡 Click vào connector để bắt đầu sạc
                 </div>
-                <ul style={{ paddingLeft: 18, margin: 0 }}>
+                <ul className="connector-list">
                   {(Array.isArray(station.connectors)
                     ? station.connectors
                     : Object.entries(station.connectors).map(([id, val]) => ({ id, ...val }))
                   ).map((connector, idx) => (
                     <li
                       key={connector.id || connector.type || idx}
-                      style={{
-                        marginBottom: 6,
-                        background: "#f5f5f5",
-                        borderRadius: 8,
-                        padding: "6px 10px",
-                        cursor: "pointer",
-                        transition: "all 0.2s",
-                        border: "1px solid transparent"
-                      }}
+                      className="connector-item"
                       onClick={() => {
                         const connectorId = connector.id || idx.toString();
                         navigate(`/charging/${station.id}/${connectorId}`);
                       }}
-                      onMouseEnter={(e) => {
-                        e.target.style.background = "#e3f2fd";
-                        e.target.style.borderColor = "#2196f3";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.target.style.background = "#f5f5f5";
-                        e.target.style.borderColor = "transparent";
-                      }}
                     >
                       <div>
-                        <span style={{ fontWeight: 500 }}>
+                        <span className="connector-name">
                           Connector {connector.type || connector.id || idx}
                         </span>
                         {" - "}
                         <span
-                          style={{
-                            color:
-                              connector.status === "Available"
-                                ? "#4caf50"
-                                : connector.status === "Charging"
-                                ? "#2196f3"
-                                : "#ff9800",
-                            fontWeight: 500
-                          }}
+                          className={`connector-status ${connector.status?.toLowerCase() || ""}`}
                         >
                           {connector.status || "Unknown"}
                         </span>
                         {connector.lastUpdate && (
-                          <span style={{ color: "#999", marginLeft: 8, fontSize: 12 }}>
+                          <span className="connector-update">
                             ({connector.lastUpdate})
                           </span>
                         )}
                       </div>
-                      {/* Hiển thị chi tiết các trường khác */}
-                      <div style={{ fontSize: 13, color: "#555", marginTop: 4 }}>
+                      <div className="connector-detail">
                         {Object.entries(connector).map(([k, v]) =>
                           ["status", "type", "id", "lastUpdate"].includes(k) ? null : (
                             <div key={k}>
@@ -140,8 +97,7 @@ function StationList() {
                 </ul>
               </div>
             )}
-            {/* Thông tin thêm */}
-            <div style={{ marginTop: 10, color: "#999", fontSize: 13 }}>
+            <div className="station-card-extra">
               <div>
                 <strong>Model:</strong> {station.model || "N/A"}
               </div>
