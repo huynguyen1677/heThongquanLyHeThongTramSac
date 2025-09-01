@@ -51,9 +51,6 @@ function StationList({ stations: propStations, title }) {
             {station.connectors && (
               <div className="station-card-connector-list">
                 <strong>Connectors:</strong>
-                <div className="station-card-connector-tip">
-                  💡 Click vào connector để bắt đầu sạc
-                </div>
                 <ul className="connector-list">
                   {(Array.isArray(station.connectors)
                     ? station.connectors
@@ -62,14 +59,10 @@ function StationList({ stations: propStations, title }) {
                     <li
                       key={connector.id || connector.type || idx}
                       className="connector-item"
-                      onClick={() => {
-                        const connectorId = connector.id || idx.toString();
-                        navigate(`/charging/${station.id}/${connectorId}`);
-                      }}
                     >
                       <div>
                         <span className="connector-name">
-                          Connector {connector.type || connector.id || idx}
+                          {connector.type || connector.id || `Connector ${idx + 1}`}
                         </span>
                         {" - "}
                         <span
@@ -77,19 +70,13 @@ function StationList({ stations: propStations, title }) {
                         >
                           {connector.status || "Unknown"}
                         </span>
-                        {connector.lastUpdate && (
-                          <span className="connector-update">
-                            ({connector.lastUpdate})
-                          </span>
-                        )}
-                      </div>
-                      <div className="connector-detail">
-                        {Object.entries(connector).map(([k, v]) =>
-                          ["status", "type", "id", "lastUpdate"].includes(k) ? null : (
-                            <div key={k}>
-                              <strong>{k}:</strong> {String(v)}
-                            </div>
-                          )
+                        {connector.power && (
+                          <>
+                            {" - "}
+                            <span className="connector-power">
+                              {connector.power} kW
+                            </span>
+                          </>
                         )}
                       </div>
                     </li>

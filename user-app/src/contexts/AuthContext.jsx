@@ -38,7 +38,8 @@ export const AuthProvider = ({ children }) => {
             name: userData.name || firebaseUser.displayName || firebaseUser.email?.split('@')[0],
             phone: userData.phone || null,
             createdAt: userData.createdAt || firebaseUser.metadata.creationTime,
-            ...userData
+            ...userData,
+            userId: userData.userId ? userData.userId.toString().padStart(6, '0') : undefined // Đảm bảo là chuỗi 6 số
           }
           
           setUser(user)
@@ -104,7 +105,7 @@ export const AuthProvider = ({ children }) => {
 
       // Cập nhật displayName
       if (name) {
-        await updateProfile(firebaseUser, { displayName: name })
+        await updateProfile(firebaseUser, { displayName: name }) // của Firebase Auth
       }
 
       // Lưu thông tin user vào Firestore

@@ -1,12 +1,14 @@
-import React from "react";
+import React, { useState } from "react";
 import "../styles/home.css";
 import StationList from "../components/StationList";
 import ChargingConfirmationDialog from '../components/ChargingConfirmationDialog';
 import StationMap from "../components/StationMap";
-import useStations from "../contexts/useStations";
+import { useCharging } from "../contexts/ChargingContext"; // Sử dụng context
+import StationDetailPopup from "../components/StationDetailPopup";
 
 function Home() {
-  const { stations, loading, error } = useStations();
+  const { stations, stationsLoading: loading, stationsError: error } = useCharging();
+  const [selectedStation, setSelectedStation] = useState(null);
 
   // Lọc trạm nổi bật (ví dụ: 2 trạm đầu)
   const featuredStations = stations.slice(0, 2);
@@ -81,8 +83,16 @@ function Home() {
       {/* Map section */}
       <section className="home-map">
         <h2>Bản đồ trạm sạc</h2>
-        <StationMap stations={validStations} />
+        <StationMap stations={validStations} onStationClick={setSelectedStation} />
       </section>
+
+      {/* Station detail popup */}
+      {selectedStation && (
+        <StationDetailPopup
+          station={selectedStation}
+          onClose={() => setSelectedStation(null)}
+        />
+      )}
     </div>
   );
 }

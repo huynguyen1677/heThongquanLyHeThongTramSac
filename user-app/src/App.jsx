@@ -24,10 +24,9 @@ function App() {
             <main>
               <Routes>
                 <Route path="/" element={<Home />} />
-                <Route path="/find" element={<FindStation />} />
                 <Route path="/history" element={<History />} />
                 <Route path="/settings" element={<Settings />} />
-                <Route path="/stations" element={<StationList />} />
+                <Route path="/stations" element={<FindStation />} />
                 <Route path="/stations/:stationId" element={<ChargingSession />} />
                 <Route path="/stations/:stationId/:connectorId" element={<ChargingSession />} />
                 <Route path="/charging/:stationId/:connectorId" element={<ChargingSession />} />

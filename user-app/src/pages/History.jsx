@@ -7,7 +7,7 @@ import { vi } from 'date-fns/locale'
 
 function History() {
   const { user } = useAuth()
-  const { chargingHistory, loading } = useCharging()
+  const { chargingHistory, loading, reloadHistory } = useCharging() // Thêm reloadHistory
   
   const [statusFilter, setStatusFilter] = useState('all')
   const [dateFilter, setDateFilter] = useState('all')
@@ -15,8 +15,7 @@ function History() {
 
   // Lọc sessions
   const filteredSessions = useMemo(() => {
-    if (!chargingHistory) return []
-    
+    if (!Array.isArray(chargingHistory)) return [];
     return chargingHistory.filter(session => {
       const matchesStatus = statusFilter === 'all' || session.status === statusFilter
       
@@ -41,6 +40,14 @@ function History() {
 
   // Thống kê
   const stats = useMemo(() => {
+    if (!Array.isArray(filteredSessions)) return {
+      totalSessions: 0,
+      completedSessions: 0,
+      totalEnergy: 0,
+      totalCost: 0,
+      avgDuration: 0
+    };
+    
     const totalSessions = filteredSessions.length
     const completedSessions = filteredSessions.filter(s => s.status === 'Completed')
     const totalEnergy = completedSessions.reduce((sum, s) => sum + (s.energyConsumed || 0), 0)
@@ -84,11 +91,20 @@ function History() {
   return (
     <div className="container py-8">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Lịch sử sạc</h1>
-        <p className="text-gray-600">
-          Xem lại các phiên sạc của bạn
-        </p>
+      <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Lịch sử sạc</h1>
+          <p className="text-gray-600">
+            Xem lại các phiên sạc của bạn
+          </p>
+        </div>
+        <button
+          onClick={reloadHistory}
+          className="btn btn-outline mt-4 md:mt-0"
+          disabled={loading}
+        >
+          {loading ? "Đang làm mới..." : "Làm mới"}
+        </button>
       </div>
 
       {/* Stats Cards */}
