@@ -1,6 +1,8 @@
 import React from 'react';
 
 function ChargingConfirmationDialog({ confirmationRequest, onRespond }) {
+  console.log("Dialog confirmationRequest:", confirmationRequest);
+  
   if (!confirmationRequest) return null;
   return (
     <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">

@@ -1,7 +1,5 @@
 import React from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
-import Header from './components/Header'
-import ChargingConfirmationDialog from './components/ChargingConfirmationDialog'
 import MainLayout from './layouts/MainLayout'
 import Home from './pages/Home'
 import FindStation from './pages/FindStation'
@@ -20,21 +18,21 @@ function App() {
       <ChargingProvider>
         <Router>
           <div className="min-h-screen bg-gray-50">
-            <Header />
             <main>
               <Routes>
-                <Route path="/" element={<Home />} />
-                <Route path="/history" element={<History />} />
-                <Route path="/settings" element={<Settings />} />
-                <Route path="/stations" element={<FindStation />} />
-                <Route path="/stations/:stationId" element={<ChargingSession />} />
-                <Route path="/stations/:stationId/:connectorId" element={<ChargingSession />} />
-                <Route path="/charging/:stationId/:connectorId" element={<ChargingSession />} />
-                <Route path="/profile" element={<Profile />} />
+                <Route element={<MainLayout />}>
+                  <Route path="/" element={<Home />} />
+                  <Route path="/history" element={<History />} />
+                  <Route path="/settings" element={<Settings />} />
+                  <Route path="/stations" element={<FindStation />} />
+                  <Route path="/stations/:stationId" element={<ChargingSession />} />
+                  <Route path="/stations/:stationId/:connectorId" element={<ChargingSession />} />
+                  <Route path="/charging/:stationId/:connectorId" element={<ChargingSession />} />
+                  <Route path="/profile" element={<Profile />} />
+                </Route>
                 <Route path="/login" element={<Login />} />
               </Routes>
             </main>
-            <ChargingConfirmationDialog />
           </div>
         </Router>
       </ChargingProvider>
