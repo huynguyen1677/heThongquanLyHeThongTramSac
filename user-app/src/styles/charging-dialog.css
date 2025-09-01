@@ -1,0 +1,312 @@
+/* Charging Dialog Overlay */
+.charging-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transition: var(--transition-base);
+}
+
+.charging-dialog-overlay.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Dialog Container */
+.charging-dialog {
+  background: var(--surface-white);
+  border-radius: 20px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-light);
+  min-width: 400px;
+  max-width: 500px;
+  width: 90vw;
+  transform: scale(0.95) translateY(20px);
+  transition: var(--transition-base);
+  overflow: hidden;
+}
+
+.charging-dialog.visible {
+  transform: scale(1) translateY(0);
+}
+
+/* Dialog Header */
+.dialog-header {
+  padding: 2rem 2rem 1rem 2rem;
+  text-align: center;
+  background: linear-gradient(135deg, #fafbfc 0%, #f8faff 100%);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.dialog-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  background: var(--primary-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 4px 8px rgba(102, 126, 234, 0.3));
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { 
+    transform: scale(1);
+    filter: drop-shadow(0 4px 8px rgba(102, 126, 234, 0.3));
+  }
+  50% { 
+    transform: scale(1.05);
+    filter: drop-shadow(0 6px 12px rgba(102, 126, 234, 0.5));
+  }
+}
+
+.dialog-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  background: var(--primary-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Dialog Content */
+.dialog-content {
+  padding: 2rem;
+}
+
+.station-info {
+  background: linear-gradient(135deg, #f8faff 0%, #f1f5f9 100%);
+  border-radius: 16px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  border: 1px solid #e2e8f0;
+}
+
+.info-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+}
+
+.info-item:not(:last-child) {
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 0.5rem;
+  padding-bottom: 1rem;
+}
+
+.info-label {
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-size: 0.925rem;
+}
+
+.info-value {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-size: 1rem;
+  background: var(--primary-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.dialog-message {
+  text-align: center;
+  color: var(--text-primary);
+  font-size: 1.05rem;
+  line-height: 1.6;
+  margin-bottom: 1.5rem;
+  font-weight: 500;
+}
+
+.dialog-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: linear-gradient(135deg, #fff7ed 0%, #fef3c7 100%);
+  border: 1px solid #fcd34d;
+  border-radius: 12px;
+  padding: 1rem 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.note-icon {
+  font-size: 1.125rem;
+}
+
+.note-text {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #92400e;
+}
+
+/* Dialog Actions */
+.dialog-actions {
+  padding: 1.5rem 2rem 2rem 2rem;
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  background: linear-gradient(135deg, #fafbfc 0%, #f8faff 100%);
+  border-top: 1px solid var(--border-light);
+}
+
+.dialog-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.875rem 1.75rem;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  border: 2px solid transparent;
+  min-width: 120px;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.dialog-button::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: inherit;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.dialog-button:hover::before {
+  opacity: 0.1;
+}
+
+.button-primary {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.button-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.4);
+}
+
+.button-primary:active {
+  transform: translateY(0);
+}
+
+.button-secondary {
+  background: var(--surface-white);
+  color: var(--text-secondary);
+  border-color: var(--border-light);
+  box-shadow: var(--shadow-sm);
+}
+
+.button-secondary:hover {
+  color: var(--text-primary);
+  border-color: #ef4444;
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(239, 68, 68, 0.15);
+}
+
+.button-secondary:active {
+  transform: translateY(0);
+}
+
+.button-icon {
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+/* Mobile Responsive */
+@media (max-width: 480px) {
+  .charging-dialog {
+    min-width: unset;
+    width: 95vw;
+    border-radius: 16px;
+  }
+  
+  .dialog-header {
+    padding: 1.5rem 1.5rem 1rem 1.5rem;
+  }
+  
+  .dialog-icon {
+    font-size: 2.5rem;
+    margin-bottom: 0.75rem;
+  }
+  
+  .dialog-title {
+    font-size: 1.25rem;
+  }
+  
+  .dialog-content {
+    padding: 1.5rem;
+  }
+  
+  .station-info {
+    padding: 1rem;
+  }
+  
+  .dialog-actions {
+    padding: 1rem 1.5rem 1.5rem 1.5rem;
+    flex-direction: column;
+  }
+  
+  .dialog-button {
+    padding: 1rem 1.5rem;
+    min-width: unset;
+  }
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .charging-dialog-overlay,
+  .charging-dialog,
+  .dialog-button {
+    transition: none;
+  }
+  
+  .dialog-icon {
+    animation: none;
+  }
+  
+  .dialog-button:hover,
+  .button-primary:hover,
+  .button-secondary:hover {
+    transform: none;
+  }
+}
+
+/* Focus states for keyboard navigation */
+.dialog-button:focus {
+  outline: 2px solid #667eea;
+  outline-offset: 2px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .charging-dialog {
+    border: 2px solid var(--text-primary);
+  }
+  
+  .dialog-header,
+  .dialog-actions {
+    background: var(--surface-white);
+  }
+  
+  .station-info {
+    background: var(--surface-white);
+    border: 1px solid var(--text-primary);
+  }
+}

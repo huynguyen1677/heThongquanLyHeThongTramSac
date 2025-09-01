@@ -1,29 +1,74 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import '../styles/charging-dialog.css';
 
 function ChargingConfirmationDialog({ confirmationRequest, onRespond }) {
-  console.log("Dialog confirmationRequest:", confirmationRequest);
+  const [isVisible, setIsVisible] = useState(false);
+  
+  useEffect(() => {
+    if (confirmationRequest) {
+      // Delay to allow for smooth animation
+      setTimeout(() => setIsVisible(true), 50);
+    } else {
+      setIsVisible(false);
+    }
+  }, [confirmationRequest]);
   
   if (!confirmationRequest) return null;
+
+  const handleRespond = (response) => {
+    setIsVisible(false);
+    // Delay the actual response to allow for closing animation
+    setTimeout(() => {
+      onRespond(response);
+    }, 200);
+  };
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-      <div className="bg-white text-gray-900 rounded-xl p-8 min-w-[320px] shadow-2xl text-center">
-        <h3 className="text-lg font-semibold mb-4">Yêu cầu xác nhận sạc</h3>
-        <p className="mb-6">
-          Trạm <b>{confirmationRequest.stationId}</b> - Cổng <b>{confirmationRequest.connectorId}</b> muốn bắt đầu sạc.<br />
-          Bạn có đồng ý không?
-        </p>
-        <div className="flex gap-4 justify-center">
+    <div className={`charging-dialog-overlay ${isVisible ? 'visible' : ''}`}>
+      <div className={`charging-dialog ${isVisible ? 'visible' : ''}`}>
+        <div className="dialog-header">
+          <div className="dialog-icon">
+            ⚡
+          </div>
+          <h3 className="dialog-title">Yêu cầu xác nhận sạc</h3>
+        </div>
+        
+        <div className="dialog-content">
+          <div className="station-info">
+            <div className="info-item">
+              <span className="info-label">Trạm sạc:</span>
+              <span className="info-value">{confirmationRequest.stationId}</span>
+            </div>
+            <div className="info-item">
+              <span className="info-label">Cổng sạc:</span>
+              <span className="info-value">#{confirmationRequest.connectorId}</span>
+            </div>
+          </div>
+          
+          <p className="dialog-message">
+            Trạm sạc muốn bắt đầu phiên sạc. Bạn có đồng ý tiếp tục không?
+          </p>
+          
+          <div className="dialog-note">
+            <span className="note-icon">💡</span>
+            <span className="note-text">Vui lòng xác nhận trong vòng 30 giây</span>
+          </div>
+        </div>
+        
+        <div className="dialog-actions">
           <button
-            onClick={() => onRespond(true)}
-            className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg transition"
+            onClick={() => handleRespond(false)}
+            className="dialog-button button-secondary"
           >
-            Đồng ý
+            <span className="button-icon">✕</span>
+            <span>Từ chối</span>
           </button>
           <button
-            onClick={() => onRespond(false)}
-            className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg transition"
+            onClick={() => handleRespond(true)}
+            className="dialog-button button-primary"
           >
-            Từ chối
+            <span className="button-icon">✓</span>
+            <span>Đồng ý</span>
           </button>
         </div>
       </div>

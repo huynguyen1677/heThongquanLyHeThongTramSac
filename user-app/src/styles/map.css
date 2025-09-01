@@ -1,0 +1,10 @@
+/* Chỉ cần styling cho container, KHÔNG ép z-index các lớp Leaflet */
+.map-container {
+  position: relative;
+  z-index: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+}
+
+/* Nếu cần map nằm dưới overlay, chỉ cần z-index thấp cho .map-container */

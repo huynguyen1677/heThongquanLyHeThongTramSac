@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import "../styles/map.css"; // Import CSS mới
 
 // Icon cho vị trí user
 const userIcon = new L.Icon({
@@ -51,25 +52,33 @@ function StationMap({ stations, onStationClick }) {
   );
 
   return (
-    <MapContainer center={mapCenter} zoom={13} style={{ height: 400, width: "100%" }}>
-      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      <UserMarker setMapCenter={setMapCenter} />
-      {stations
-        .filter(
-          (s) =>
-            typeof s.latitude === "number" && typeof s.longitude === "number"
-        )
-        .map((station) => (
-          <Marker
-            key={station.id}
-            position={[station.latitude, station.longitude]}
-            icon={stationIcon}
-            eventHandlers={{
-              click: () => onStationClick && onStationClick(station),
-            }}
-          />
-        ))}
-    </MapContainer>
+    <div className="map-container"> {/* Thêm wrapper container */}
+      <MapContainer 
+        center={mapCenter} 
+        zoom={13} 
+        style={{ height: 400, width: "100%" }}
+        zoomControl={true}
+        scrollWheelZoom={true}
+      >
+        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <UserMarker setMapCenter={setMapCenter} />
+        {stations
+          .filter(
+            (s) =>
+              typeof s.latitude === "number" && typeof s.longitude === "number"
+          )
+          .map((station) => (
+            <Marker
+              key={station.id}
+              position={[station.latitude, station.longitude]}
+              icon={stationIcon}
+              eventHandlers={{
+                click: () => onStationClick && onStationClick(station),
+              }}
+            />
+          ))}
+      </MapContainer>
+    </div>
   );
 }
 

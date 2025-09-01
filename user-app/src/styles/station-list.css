@@ -1,103 +1,512 @@
+/* Station List Styles */
+
+/* Wrapper */
 .station-list-wrapper {
-  max-width: 900px;
-  margin: 0 auto;
+  width: 100%;
 }
-.station-list-title {
-  text-align: center;
-  margin: 24px 0;
-  font-size: 1.3rem;
-  color: #2563eb;
-}
-.station-list {
+
+.station-list-header {
   display: flex;
-  flex-wrap: wrap;
-  gap: 24px;
-  justify-content: center;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-6);
 }
-.station-card {
-  min-width: 320px;
-  max-width: 380px;
-  flex: 1 1 340px;
-  background: #fff;
-  border: 1px solid #e0e0e0;
-  border-radius: 16px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-  padding: 20px;
-  margin-bottom: 16px;
-  transition: box-shadow 0.2s;
-  position: relative;
+
+.station-list-title {
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
 }
-.station-card-header {
+
+.station-count {
   display: flex;
   align-items: center;
-  margin-bottom: 8px;
-}
-.station-status {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  margin-right: 10px;
-  border: 2px solid #fff;
-  box-shadow: 0 0 0 2px #eee;
-}
-.station-status.online { background: #4caf50; }
-.station-status.offline { background: #f44336; }
-.station-card-name {
-  margin: 0;
-  font-size: 20px;
+  gap: var(--space-2);
+  background: var(--gradient-primary);
+  color: var(--text-on-primary);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-full);
   font-weight: 600;
+  font-size: 0.875rem;
 }
-.station-card-address,
-.station-card-status,
-.station-card-connectors {
-  color: #757575;
-  margin-bottom: 8px;
+
+.count-number {
+  font-size: 1.25rem;
+  font-weight: 700;
 }
-.station-card-status .online { color: #4caf50; font-weight: 500; }
-.station-card-status .offline { color: #f44336; font-weight: 500; }
-.station-card-connector-list {
-  margin-top: 10px;
+
+/* Grid Layout */
+.station-list-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--space-6);
 }
-.station-card-connector-tip {
-  font-size: 12px;
-  color: #666;
-  margin-bottom: 8px;
+
+.station-list-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
 }
-.connector-list {
-  padding-left: 18px;
-  margin: 0;
-}
-.connector-item {
-  margin-bottom: 6px;
-  background: #f5f5f5;
-  border-radius: 8px;
-  padding: 6px 10px;
+
+/* Station Card */
+.station-card {
+  background: var(--surface-primary);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-light);
+  box-shadow: var(--elevation-2);
+  overflow: hidden;
+  transition: var(--transition-base);
   cursor: pointer;
-  transition: background 0.2s, border 0.2s;
-  border: 1px solid transparent;
+  position: relative;
 }
-.connector-item:hover {
-  background: #e3f2fd;
-  border-color: #2196f3;
+
+.station-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--gradient-primary);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: var(--transition-base);
 }
-.connector-name {
+
+.station-card:hover::before {
+  transform: scaleX(1);
+}
+
+.station-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--elevation-4);
+  border-color: var(--primary-200);
+}
+
+/* Card Header */
+.station-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-4) var(--space-5) var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--border-light);
+  background: linear-gradient(135deg, var(--gray-50) 0%, var(--white) 100%);
+}
+
+.station-status-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.station-status-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-full);
+  position: relative;
+  flex-shrink: 0;
+}
+
+.station-status-indicator::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  border-radius: var(--radius-full);
+  opacity: 0.3;
+  animation: pulse 2s infinite;
+}
+
+/* Status Colors */
+.status-available .station-status-indicator,
+.status-available.station-status-indicator {
+  background-color: var(--status-available);
+}
+
+.status-available .station-status-indicator::after,
+.status-available.station-status-indicator::after {
+  background-color: var(--status-available);
+}
+
+.status-offline .station-status-indicator,
+.status-offline.station-status-indicator {
+  background-color: var(--status-offline);
+}
+
+.status-charging .station-status-indicator,
+.status-charging.station-status-indicator {
+  background-color: var(--status-charging);
+}
+
+.status-occupied .station-status-indicator,
+.status-occupied.station-status-indicator {
+  background-color: var(--status-occupied);
+}
+
+.status-maintenance .station-status-indicator,
+.status-maintenance.station-status-indicator {
+  background-color: var(--status-maintenance);
+}
+
+.status-faulted .station-status-indicator,
+.status-faulted.station-status-indicator {
+  background-color: var(--status-faulted);
+}
+
+.status-unknown .station-status-indicator,
+.status-unknown.station-status-indicator {
+  background-color: var(--status-unknown);
+}
+
+.station-status-text {
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.status-available { color: var(--text-success); }
+.status-offline { color: var(--text-error); }
+.status-charging { color: var(--text-info); }
+.status-occupied { color: var(--text-warning); }
+.status-maintenance { color: var(--text-warning); }
+.status-faulted { color: var(--text-error); }
+.status-unknown { color: var(--text-muted); }
+
+.station-card-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.station-favorite-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.station-favorite-btn:hover {
+  background: var(--gray-100);
+  color: var(--warning-500);
+}
+
+/* Card Content */
+.station-card-content {
+  padding: var(--space-5);
+}
+
+.station-card-name {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 var(--space-4) 0;
+  line-height: 1.3;
+}
+
+.station-card-address {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.station-card-address svg {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.station-card-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: 0.875rem;
   font-weight: 500;
 }
-.connector-status.available { color: #4caf50; font-weight: 500; }
-.connector-status.charging { color: #2196f3; font-weight: 500; }
-.connector-status.unknown { color: #ff9800; font-weight: 500; }
-.connector-update {
-  color: #999;
-  margin-left: 8px;
-  font-size: 12px;
+
+.info-item svg {
+  color: var(--text-muted);
+  flex-shrink: 0;
 }
-.connector-detail {
-  font-size: 13px;
-  color: #555;
-  margin-top: 4px;
+
+/* Connectors */
+.station-connectors {
+  background: var(--gray-50);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
 }
-.station-card-extra {
-  margin-top: 10px;
-  color: #999;
-  font-size: 13px;
+
+.connectors-header {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-3);
+}
+
+.connectors-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.connector-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  background: var(--white);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+}
+
+.connector-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.connector-type {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.connector-status {
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.connector-power {
+  font-size: 0.875rem;
+  font-weight: 700;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--white);
+}
+
+.power-low { background: var(--power-low); }
+.power-medium { background: var(--power-medium); }
+.power-high { background: var(--power-high); }
+.power-ultra { background: var(--power-ultra); }
+
+.connector-more {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  font-style: italic;
+  padding: var(--space-2);
+}
+
+/* Card Footer */
+.station-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--border-light);
+  background: var(--gray-50);
+}
+
+.station-meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.station-id,
+.station-model {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.station-model {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* Buttons */
+
+/* Loading State */
+.station-list-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-20);
+  background: var(--surface-primary);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-light);
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-light);
+  border-top: 3px solid var(--primary-500);
+  border-radius: var(--radius-full);
+  animation: spin 1s linear infinite;
+  margin-bottom: var(--space-4);
+}
+
+.loading-text {
+  color: var(--text-secondary);
+  font-weight: 500;
+  margin: 0;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Error State */
+.station-list-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-20);
+  background: var(--surface-primary);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-light);
+  text-align: center;
+}
+
+.error-icon {
+  color: var(--error-500);
+  margin-bottom: var(--space-4);
+}
+
+.error-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 var(--space-2) 0;
+}
+
+.error-message {
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-6) 0;
+}
+
+/* Empty State */
+.station-list-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-20);
+  background: var(--surface-primary);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-light);
+  text-align: center;
+}
+
+.empty-icon {
+  color: var(--text-muted);
+  opacity: 0.5;
+  margin-bottom: var(--space-4);
+}
+
+.empty-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 var(--space-2) 0;
+}
+
+.empty-message {
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* Animations */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .station-list-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-4);
+  }
+  
+  .station-list-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+  }
+  
+  .station-card-content {
+    padding: var(--space-4);
+  }
+  
+  .station-card-footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3);
+  }
+  
+  .station-meta {
+    text-align: center;
+  }
+  
+  .btn {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .station-card-header {
+    padding: var(--space-3) var(--space-4);
+  }
+  
+  .station-card-content {
+    padding: var(--space-3);
+  }
+  
+  .station-card-footer {
+    padding: var(--space-3) var(--space-4);
+  }
+  
+  .station-card-info {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  
+  .connectors-list {
+    gap: var(--space-2);
+  }
 }
