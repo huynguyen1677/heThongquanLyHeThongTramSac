@@ -8,6 +8,7 @@ import Settings from './pages/Settings'
 import ChargingSession from './pages/ChargingSession'
 import Profile from './pages/Profile'
 import Login from './pages/Login'
+import Wallet from './pages/Wallet'  // Thêm import cho Wallet
 import { AuthProvider } from './contexts/AuthContext'
 import { ChargingProvider } from './contexts/ChargingContext'
 import StationList from "./components/StationList";
@@ -29,6 +30,7 @@ function App() {
                   <Route path="/stations/:stationId/:connectorId" element={<ChargingSession />} />
                   <Route path="/charging/:stationId/:connectorId" element={<ChargingSession />} />
                   <Route path="/profile" element={<Profile />} />
+                  <Route path="/wallet" element={<Wallet />} />  {/* Thêm route cho Wallet */}
                 </Route>
                 <Route path="/login" element={<Login />} />
               </Routes>

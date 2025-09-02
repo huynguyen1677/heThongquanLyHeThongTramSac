@@ -116,7 +116,8 @@ export const AuthProvider = ({ children }) => {
         role: 'user',
         userId, // Lưu userId dạng chuỗi 6 số
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        walletBalance: 100000 // Tặng 100k khi đăng ký mới
       }
 
       await setDoc(doc(db, 'users', firebaseUser.uid), userData)

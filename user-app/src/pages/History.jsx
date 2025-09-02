@@ -4,14 +4,16 @@ import { useAuth } from '../contexts/AuthContext'
 import { useCharging } from '../contexts/ChargingContext'
 import { format } from 'date-fns'
 import { vi } from 'date-fns/locale'
+import '../styles/history-page.css'
 
 function History() {
   const { user } = useAuth()
-  const { chargingHistory, loading, reloadHistory } = useCharging() // Thêm reloadHistory
+  const { chargingHistory, loading, reloadHistory } = useCharging()
   
   const [statusFilter, setStatusFilter] = useState('all')
   const [dateFilter, setDateFilter] = useState('all')
   const [stationFilter, setStationFilter] = useState('all')
+  const [viewMode, setViewMode] = useState('grid') // grid hoặc list
 
   // Lọc sessions
   const filteredSessions = useMemo(() => {
@@ -74,13 +76,23 @@ function History() {
     return Array.from(stations).map(s => JSON.parse(s))
   }, [chargingHistory])
 
+  const resetFilters = () => {
+    setStatusFilter('all')
+    setDateFilter('all')
+    setStationFilter('all')
+  }
+
   if (!user) {
     return (
-      <div className="container py-8">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Lịch sử sạc</h1>
-          <p className="text-gray-600 mb-6">Vui lòng đăng nhập để xem lịch sử sạc</p>
-          <Link to="/login" className="btn btn-primary">
+      <div className="history-container">
+        <div className="auth-required">
+          <div className="auth-icon">
+            <i className="fas fa-user-lock"></i>
+          </div>
+          <h1 className="auth-title">Lịch sử sạc</h1>
+          <p className="auth-message">Vui lòng đăng nhập để xem lịch sử sạc của bạn</p>
+          <Link to="/login" className="btn btn-primary btn-lg">
+            <i className="fas fa-sign-in-alt"></i>
             Đăng nhập
           </Link>
         </div>
@@ -89,84 +101,125 @@ function History() {
   }
 
   return (
-    <div className="container py-8">
+    <div className="history-container">
       {/* Header */}
-      <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Lịch sử sạc</h1>
-          <p className="text-gray-600">
-            Xem lại các phiên sạc của bạn
-          </p>
+      <div className="history-header">
+        <div className="header-content">
+          <div className="header-left">
+            <h1 className="page-title">Lịch sử sạc</h1>
+            <p className="page-subtitle">Xem lại các phiên sạc của bạn</p>
+          </div>
+          <div className="header-actions">
+            <button
+              onClick={reloadHistory}
+              className="btn btn-outline"
+              disabled={loading}
+            >
+              <i className={`fas ${loading ? 'fa-spinner fa-spin' : 'fa-sync-alt'}`}></i>
+              {loading ? "Đang làm mới..." : "Làm mới"}
+            </button>
+          </div>
         </div>
-        <button
-          onClick={reloadHistory}
-          className="btn btn-outline mt-4 md:mt-0"
-          disabled={loading}
-        >
-          {loading ? "Đang làm mới..." : "Làm mới"}
-        </button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-        <div className="card text-center">
-          <div className="card-body">
-            <div className="text-2xl font-bold text-primary-600 mb-1">
-              {stats.totalSessions}
+      <div className="stats-grid">
+        <div className="stat-card stat-primary">
+          <div className="stat-content">
+            <div className="stat-info">
+              <p className="stat-label">Tổng phiên</p>
+              <p className="stat-value">{stats.totalSessions}</p>
             </div>
-            <p className="text-gray-600 text-sm">Tổng phiên</p>
+            <div className="stat-icon icon-bg-primary">
+              <i className="fas fa-charging-station"></i>
+            </div>
           </div>
         </div>
         
-        <div className="card text-center">
-          <div className="card-body">
-            <div className="text-2xl font-bold text-success-600 mb-1">
-              {stats.completedSessions}
+        <div className="stat-card stat-success">
+          <div className="stat-content">
+            <div className="stat-info">
+              <p className="stat-label">Hoàn thành</p>
+              <p className="stat-value">{stats.completedSessions}</p>
             </div>
-            <p className="text-gray-600 text-sm">Hoàn thành</p>
+            <div className="stat-icon icon-bg-success">
+              <i className="fas fa-check-circle"></i>
+            </div>
           </div>
         </div>
         
-        <div className="card text-center">
-          <div className="card-body">
-            <div className="text-2xl font-bold text-warning-600 mb-1">
-              {stats.totalEnergy}
+        <div className="stat-card stat-warning">
+          <div className="stat-content">
+            <div className="stat-info">
+              <p className="stat-label">Năng lượng</p>
+              <p className="stat-value">{stats.totalEnergy} kWh</p>
             </div>
-            <p className="text-gray-600 text-sm">kWh</p>
+            <div className="stat-icon icon-bg-warning">
+              <i className="fas fa-bolt"></i>
+            </div>
           </div>
         </div>
         
-        <div className="card text-center">
-          <div className="card-body">
-            <div className="text-2xl font-bold text-danger-600 mb-1">
-              {stats.totalCost.toLocaleString()}
+        <div className="stat-card stat-info">
+          <div className="stat-content">
+            <div className="stat-info">
+              <p className="stat-label">Chi phí</p>
+              <p className="stat-value">{stats.totalCost.toLocaleString()}₫</p>
             </div>
-            <p className="text-gray-600 text-sm">VNĐ</p>
+            <div className="stat-icon icon-bg-info">
+              <i className="fas fa-wallet"></i>
+            </div>
           </div>
         </div>
         
-        <div className="card text-center">
-          <div className="card-body">
-            <div className="text-2xl font-bold text-gray-600 mb-1">
-              {stats.avgDuration}
+        <div className="stat-card stat-secondary">
+          <div className="stat-content">
+            <div className="stat-info">
+              <p className="stat-label">Thời gian TB</p>
+              <p className="stat-value">{stats.avgDuration} phút</p>
             </div>
-            <p className="text-gray-600 text-sm">phút TB</p>
+            <div className="stat-icon icon-bg-secondary">
+              <i className="fas fa-clock"></i>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="card mb-6">
-        <div className="card-body">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <label className="form-label">Trạng thái</label>
+      {/* Filters & Controls */}
+      <div className="filters-section">
+        <div className="filters-header">
+          <h3 className="filters-title">Bộ lọc & Sắp xếp</h3>
+          <div className="view-controls">
+            <button
+              className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`}
+              onClick={() => setViewMode('grid')}
+              title="Xem dạng lưới"
+            >
+              <i className="fas fa-th"></i>
+            </button>
+            <button
+              className={`view-btn ${viewMode === 'list' ? 'active' : ''}`}
+              onClick={() => setViewMode('list')}
+              title="Xem dạng danh sách"
+            >
+              <i className="fas fa-list"></i>
+            </button>
+          </div>
+        </div>
+        
+        <div className="filters-content">
+          <div className="filters-grid">
+            <div className="filter-group">
+              <label className="filter-label">
+                <i className="fas fa-info-circle"></i>
+                Trạng thái
+              </label>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="form-input"
+                className="filter-select"
               >
-                <option value="all">Tất cả</option>
+                <option value="all">Tất cả trạng thái</option>
                 <option value="Charging">Đang sạc</option>
                 <option value="Completed">Hoàn thành</option>
                 <option value="Cancelled">Đã hủy</option>
@@ -174,26 +227,32 @@ function History() {
               </select>
             </div>
 
-            <div>
-              <label className="form-label">Thời gian</label>
+            <div className="filter-group">
+              <label className="filter-label">
+                <i className="fas fa-calendar-alt"></i>
+                Thời gian
+              </label>
               <select
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value)}
-                className="form-input"
+                className="filter-select"
               >
-                <option value="all">Tất cả</option>
+                <option value="all">Tất cả thời gian</option>
                 <option value="7d">7 ngày qua</option>
                 <option value="30d">30 ngày qua</option>
                 <option value="90d">90 ngày qua</option>
               </select>
             </div>
 
-            <div>
-              <label className="form-label">Trạm sạc</label>
+            <div className="filter-group">
+              <label className="filter-label">
+                <i className="fas fa-map-marker-alt"></i>
+                Trạm sạc
+              </label>
               <select
                 value={stationFilter}
                 onChange={(e) => setStationFilter(e.target.value)}
-                className="form-input"
+                className="filter-select"
               >
                 <option value="all">Tất cả trạm</option>
                 {uniqueStations.map(station => (
@@ -204,15 +263,12 @@ function History() {
               </select>
             </div>
 
-            <div className="flex items-end">
+            <div className="filter-group">
               <button
-                onClick={() => {
-                  setStatusFilter('all')
-                  setDateFilter('all')
-                  setStationFilter('all')
-                }}
-                className="btn btn-outline w-full"
+                onClick={resetFilters}
+                className="btn btn-outline btn-reset"
               >
+                <i className="fas fa-times"></i>
                 Xóa bộ lọc
               </button>
             </div>
@@ -220,60 +276,50 @@ function History() {
         </div>
       </div>
 
-      {/* Results */}
-      <div className="mb-4">
-        <p className="text-gray-600">
-          Hiển thị <span className="font-semibold">{filteredSessions.length}</span> phiên sạc
+      {/* Results Info */}
+      <div className="results-info">
+        <p className="results-text">
+          Hiển thị <span className="results-count">{filteredSessions.length}</span> phiên sạc
+          {(statusFilter !== 'all' || dateFilter !== 'all' || stationFilter !== 'all') && (
+            <button onClick={resetFilters} className="reset-link">
+              <i className="fas fa-times"></i> Xóa bộ lọc
+            </button>
+          )}
         </p>
       </div>
 
       {/* Sessions List */}
       {loading ? (
-        <div className="space-y-4">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="card">
-              <div className="card-body">
-                <div className="animate-pulse">
-                  <div className="bg-gray-200 h-6 rounded mb-2"></div>
-                  <div className="bg-gray-200 h-4 rounded mb-2 w-3/4"></div>
-                  <div className="bg-gray-200 h-4 rounded w-1/2"></div>
-                </div>
-              </div>
-            </div>
-          ))}
+        <div className="loading-section">
+          <div className="loading-spinner-large">
+            <i className="fas fa-spinner fa-spin"></i>
+          </div>
+          <p className="loading-text">Đang tải dữ liệu...</p>
         </div>
       ) : filteredSessions.length === 0 ? (
-        <div className="text-center py-12">
-          <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-400">
-              <path d="M12 2L13.09 8.26L22 9L13.09 9.74L12 16L10.91 9.74L2 9L10.91 8.26L12 2Z"/>
-              <circle cx="12" cy="12" r="3"/>
-            </svg>
+        <div className="empty-state">
+          <div className="empty-icon">
+            <i className="fas fa-history"></i>
           </div>
-          <h3 className="text-lg font-semibold mb-2">Chưa có phiên sạc nào</h3>
-          <p className="text-gray-600 mb-4">
-            Bạn chưa có phiên sạc nào hoặc không có phiên nào khớp với bộ lọc
+          <h3 className="empty-title">Chưa có phiên sạc nào</h3>
+          <p className="empty-message">
+            Bạn chưa có phiên sạc nào hoặc không có phiên nào khớp với bộ lọc hiện tại.
           </p>
-          <div className="flex gap-4 justify-center">
-            <button 
-              onClick={() => {
-                setStatusFilter('all')
-                setDateFilter('all') 
-                setStationFilter('all')
-              }}
-              className="btn btn-outline"
-            >
+          <div className="empty-actions">
+            <button onClick={resetFilters} className="btn btn-outline">
+              <i className="fas fa-filter"></i>
               Xóa bộ lọc
             </button>
             <Link to="/stations" className="btn btn-primary">
+              <i className="fas fa-search"></i>
               Tìm trạm sạc
             </Link>
           </div>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className={`sessions-container ${viewMode}`}>
           {filteredSessions.map(session => (
-            <SessionCard key={session.id} session={session} />
+            <SessionCard key={session.id} session={session} viewMode={viewMode} />
           ))}
         </div>
       )}
@@ -281,35 +327,45 @@ function History() {
   )
 }
 
-// Session Card Component
-const SessionCard = ({ session }) => {
-  const getStatusBadge = (status) => {
+// Enhanced Session Card Component
+const SessionCard = ({ session, viewMode }) => {
+  const getStatusConfig = (status) => {
     switch (status) {
       case 'Charging':
-        return 'badge-warning'
+        return { 
+          class: 'status-charging', 
+          icon: 'fa-bolt',
+          text: 'Đang sạc',
+          color: 'warning'
+        }
       case 'Completed':
-        return 'badge-success'
+        return { 
+          class: 'status-completed', 
+          icon: 'fa-check-circle',
+          text: 'Hoàn thành',
+          color: 'success'
+        }
       case 'Cancelled':
-        return 'badge-primary'
+        return { 
+          class: 'status-cancelled', 
+          icon: 'fa-times-circle',
+          text: 'Đã hủy',
+          color: 'secondary'
+        }
       case 'Failed':
-        return 'badge-danger'
+        return { 
+          class: 'status-failed', 
+          icon: 'fa-exclamation-triangle',
+          text: 'Thất bại',
+          color: 'error'
+        }
       default:
-        return 'badge-primary'
-    }
-  }
-
-  const getStatusText = (status) => {
-    switch (status) {
-      case 'Charging':
-        return 'Đang sạc'
-      case 'Completed':
-        return 'Hoàn thành'
-      case 'Cancelled':
-        return 'Đã hủy'
-      case 'Failed':
-        return 'Thất bại'
-      default:
-        return status
+        return { 
+          class: 'status-unknown', 
+          icon: 'fa-question-circle',
+          text: status,
+          color: 'secondary'
+        }
     }
   }
 
@@ -325,72 +381,108 @@ const SessionCard = ({ session }) => {
     return `${mins}m`
   }
 
-  return (
-    <div className="card">
-      <div className="card-body">
-        <div className="flex flex-col md:flex-row md:items-center justify-between">
-          <div className="flex-1 mb-4 md:mb-0">
-            <div className="flex items-start justify-between mb-2">
-              <div>
-                <h3 className="font-semibold text-lg mb-1">
-                  {session.stationName || `Trạm ${session.stationId}`}
-                </h3>
-                <p className="text-gray-600 text-sm mb-2">
-                  {session.stationAddress || 'Địa chỉ không xác định'}
-                </p>
-                <div className="flex items-center gap-4 text-sm text-gray-600">
-                  <span>Cổng {session.connectorId}</span>
-                  <span>•</span>
-                  <span>{session.connectorType} - {session.power}kW</span>
-                  {session.duration > 0 && (
-                    <>
-                      <span>•</span>
-                      <span>{formatDuration(session.duration)}</span>
-                    </>
-                  )}
-                </div>
-              </div>
-              
-              <span className={`badge ${getStatusBadge(session.status)}`}>
-                {getStatusText(session.status)}
-              </span>
-            </div>
+  const statusConfig = getStatusConfig(session.status)
 
-            <div className="text-sm text-gray-600">
-              <p>
-                Bắt đầu: {format(new Date(session.startTime), 'HH:mm - dd/MM/yyyy', { locale: vi })}
-              </p>
-              {session.endTime && (
-                <p>
-                  Kết thúc: {format(new Date(session.endTime), 'HH:mm - dd/MM/yyyy', { locale: vi })}
-                </p>
-              )}
+  return (
+    <div className={`session-card ${viewMode} ${statusConfig.class}`}>
+      <div className="session-card-header">
+        <div className="session-status">
+          <div className={`status-indicator status-${statusConfig.color}`}>
+            <i className={`fas ${statusConfig.icon}`}></i>
+          </div>
+          <span className={`status-text status-${statusConfig.color}`}>
+            {statusConfig.text}
+          </span>
+        </div>
+        <div className="session-actions">
+          {session.status === 'Charging' && (
+            <Link
+              to={`/charging/${session.stationId}/${session.connectorId}`}
+              className="btn btn-primary btn-sm"
+              title="Xem chi tiết phiên sạc"
+            >
+              <i className="fas fa-eye"></i>
+            </Link>
+          )}
+          <button className="session-menu-btn" title="Tùy chọn khác">
+            <i className="fas fa-ellipsis-v"></i>
+          </button>
+        </div>
+      </div>
+
+      <div className="session-card-content">
+        <div className="session-main-info">
+          <h3 className="session-station-name">
+            <i className="fas fa-charging-station"></i>
+            {session.stationName || `Trạm ${session.stationId}`}
+          </h3>
+          <p className="session-station-address">
+            <i className="fas fa-map-marker-alt"></i>
+            {session.stationAddress || 'Địa chỉ không xác định'}
+          </p>
+        </div>
+
+        <div className="session-details">
+          <div className="session-detail-row">
+            <div className="detail-item">
+              <i className="fas fa-plug"></i>
+              <span>Cổng {session.connectorId}</span>
             </div>
+            <div className="detail-item">
+              <i className="fas fa-bolt"></i>
+              <span>{session.connectorType} - {session.power}kW</span>
+            </div>
+            {session.duration > 0 && (
+              <div className="detail-item">
+                <i className="fas fa-clock"></i>
+                <span>{formatDuration(session.duration)}</span>
+              </div>
+            )}
           </div>
 
-          <div className="flex flex-col md:flex-row md:items-center gap-4">
-            <div className="text-center md:text-right">
-              <p className="text-sm text-gray-600">Năng lượng</p>
-              <p className="font-semibold text-lg">
-                {(session.energyConsumed || 0).toFixed(2)}kWh
-              </p>
+          <div className="session-time-info">
+            <div className="time-item">
+              <span className="time-label">Bắt đầu:</span>
+              <span className="time-value">
+                {format(new Date(session.startTime), 'HH:mm - dd/MM/yyyy', { locale: vi })}
+              </span>
             </div>
-            
-            <div className="text-center md:text-right">
-              <p className="text-sm text-gray-600">Chi phí</p>
-              <p className="font-semibold text-lg text-primary-600">
-                {(session.estimatedCost || session.cost || 0).toLocaleString()}đ
-              </p>
-            </div>
-
-            {session.status === 'Charging' && (
-              <Link
-                to={`/charging/${session.stationId}/${session.connectorId}`}
-                className="btn btn-primary btn-sm"
-              >
-                Xem chi tiết
-              </Link>
+            {session.endTime && (
+              <div className="time-item">
+                <span className="time-label">Kết thúc:</span>
+                <span className="time-value">
+                  {format(new Date(session.endTime), 'HH:mm - dd/MM/yyyy', { locale: vi })}
+                </span>
+              </div>
             )}
+          </div>
+        </div>
+      </div>
+
+      <div className="session-card-footer">
+        <div className="session-metrics">
+          <div className="metric-item energy">
+            <div className="metric-icon">
+              <i className="fas fa-battery-three-quarters"></i>
+            </div>
+            <div className="metric-info">
+              <span className="metric-label">Năng lượng</span>
+              <span className="metric-value">
+                {(session.energyConsumed || 0).toFixed(2)} kWh
+              </span>
+            </div>
+          </div>
+          
+          <div className="metric-item cost">
+            <div className="metric-icon">
+              <i className="fas fa-coins"></i>
+            </div>
+            <div className="metric-info">
+              <span className="metric-label">Chi phí</span>
+              <span className="metric-value">
+                {(session.estimatedCost || session.cost || 0).toLocaleString()}₫
+              </span>
+            </div>
           </div>
         </div>
       </div>

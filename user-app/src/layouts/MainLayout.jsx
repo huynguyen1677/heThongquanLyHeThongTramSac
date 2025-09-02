@@ -4,7 +4,7 @@ import Header from "../components/Header";
 import Sidebar from "../components/Sidebar";
 import ChargingConfirmationDialog from "../components/ChargingConfirmationDialog";
 import { useCharging } from "../contexts/ChargingContext";
-import "../styles/layout.css"; // nhớ tạo file này
+import "../styles/layout-clean.css";
 
 function MainLayout() {
   const { confirmationRequest, respondConfirmation } = useCharging();
@@ -12,13 +12,23 @@ function MainLayout() {
 
   return (
     <div className="main-layout">
-      <Sidebar />
-      <div className="main-content">
-        <Header />
-        <main className="page-content">
-          <Outlet /> {/* Đây là nơi các trang con sẽ được render */}
-        </main>
+      {/* Main Container */}
+      <div className="layout-container">
+        {/* Sidebar */}
+        <Sidebar />
+        
+        {/* Main Content */}
+        <div className="main-content">
+          {/* Header */}
+          <Header />
+          
+          {/* Page Content */}
+          <main className="page-content">
+            <Outlet /> {/* Đây là nơi các trang con sẽ được render */}
+          </main>
+        </div>
       </div>
+      
       <ChargingConfirmationDialog
         confirmationRequest={confirmationRequest}
         onRespond={respondConfirmation}
