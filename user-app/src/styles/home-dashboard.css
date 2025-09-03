@@ -580,8 +580,3 @@
     text-align: center;
   }
 }
-
-/* XÓA CÁC CSS CŨ LIÊN QUAN ĐẾN ACTIVITY */
-/* Xóa toàn bộ: .activity-card, .activity-header, .activity-title, .activity-list, 
-   .activity-item, .activity-icon, .activity-content, .activity-item-title, 
-   .activity-item-description, .activity-amount, .activity-amount-*, .activity-icon-* */

@@ -18,3 +18,41 @@ export function listenChargingRequest(userId, callback) {
   // Trả về hàm hủy lắng nghe
   return () => off(requestRef, "value", unsubscribe);
 }
+
+// Lắng nghe trạng thái sạc realtime cho userId cụ thể
+export function listenUserCharging(userId, callback) {
+  const stationsRef = ref(realtimeDb, `live/stations`);
+  const unsubscribe = onValue(stationsRef, (snapshot) => {
+    let userChargingData = null;
+    const stations = snapshot.val();
+    
+    console.log('Firebase stations data:', stations);
+    
+    if (stations) {
+      // Duyệt qua tất cả các trạm
+      Object.entries(stations).forEach(([stationId, station]) => {
+        if (station.connectors) {
+          // Duyệt qua tất cả các connector
+          Object.entries(station.connectors).forEach(([connectorId, connector]) => {
+            console.log(`Checking connector ${stationId}-${connectorId}:`, connector);
+            
+            // Tìm connector của user đang sạc
+            if (connector.userId === userId && connector.status === "Charging") {
+              userChargingData = {
+                ...connector,
+                stationId,
+                connectorId
+              };
+              console.log('Found charging session for user:', userChargingData);
+            }
+          });
+        }
+      });
+    }
+    
+    console.log('Final userChargingData:', userChargingData);
+    callback(userChargingData);
+  });
+  
+  return () => off(stationsRef, "value", unsubscribe);
+}

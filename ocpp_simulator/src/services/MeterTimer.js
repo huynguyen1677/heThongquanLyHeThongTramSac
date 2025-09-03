@@ -24,6 +24,9 @@ export class MeterTimer {
     this.pausedTime = 0; // Tổng thời gian đã pause (ms)
     this.pauseStartTime = null; // Thời điểm bắt đầu pause
     this.pricePerKwh = null; // Giá điện sẽ được cập nhật động
+
+    // Thêm thuộc tính ngưỡng sạc đầy (ví dụ: 40 kWh)
+    this.fullChargeThresholdKwh = 2; // Có thể chỉnh theo loại xe
   }
 
   /**
@@ -195,7 +198,8 @@ export class MeterTimer {
       duration: this.getChargingDurationInSeconds(), // Sử dụng method mới trả về số giây
       estimatedCost: cost.toFixed(0),
       isRunning: this.isRunning,
-      pricePerKwh: this.pricePerKwh || 0 // Trả về 0 nếu chưa có giá điện
+      pricePerKwh: this.pricePerKwh || 0, // Trả về 0 nếu chưa có giá điện
+      fullChargeThresholdKwh: this.fullChargeThresholdKwh // Thêm ngưỡng sạc đầy
     };
   }
 
@@ -334,6 +338,43 @@ export class MeterTimer {
       .catch((error) => {
         this.log(`❌ Lỗi khi gửi meter values: ${error.message}`, 'error');
       });
+
+    // 5.1. Gửi thông tin ngưỡng sạc đầy lên realtime database
+    const energyKwh = this.getEnergyConsumed();
+    const realtimeData = {
+      connectorId: this.connectorId,
+      transactionId: this.transactionId,
+      fullChargeThresholdKwh: this.fullChargeThresholdKwh,
+      currentEnergyKwh: energyKwh,
+      timestamp: new Date().toISOString()
+    };
+
+    this.log(`🚀 Sending DataTransfer: ${JSON.stringify(realtimeData)}`);
+    
+    this.ocppClient.sendCall('DataTransfer', {
+      vendorId: 'RealtimeUpdate',
+      messageId: 'ChargeThreshold',
+      data: JSON.stringify(realtimeData)
+    }).then((response) => {
+      this.log(`✅ DataTransfer response: ${JSON.stringify(response)}`);
+    }).catch((error) => {
+      this.log(`❌ Lỗi khi gửi threshold data: ${error.message}`, 'error');
+    });
+
+    // 6. Kiểm tra trạng thái sạc đầy
+    if (energyKwh >= this.fullChargeThresholdKwh) {
+      // Gửi trạng thái sạc đầy về backend (StatusNotification)
+      this.ocppClient.sendCall('StatusNotification', {
+        connectorId: this.connectorId,
+        status: 'FullyCharged', // hoặc 'ChargingComplete'
+        timestamp: new Date().toISOString()
+      }).catch((error) => {
+        this.log(`❌ Lỗi khi gửi trạng thái FullyCharged: ${error.message}`, 'error');
+      });
+
+      this.log(`✅ Xe đã sạc đầy (${energyKwh.toFixed(2)} kWh) - Dừng timer!`);
+      this.stop(); // Dừng tiến trình sạc
+    }
   }
 
   // Get energy consumed in kWh

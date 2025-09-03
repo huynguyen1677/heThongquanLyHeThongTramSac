@@ -214,6 +214,18 @@ export const RemoteStopTransactionConfSchema = z.object({
   status: z.enum(['Accepted', 'Rejected'])
 });
 
+// DataTransfer
+export const DataTransferReqSchema = z.object({
+  vendorId: z.string(),
+  messageId: z.string().optional(),
+  data: z.string().optional()
+});
+
+export const DataTransferConfSchema = z.object({
+  status: z.enum(['Accepted', 'Rejected', 'UnknownMessageId', 'UnknownVendorId']),
+  data: z.string().optional()
+});
+
 // Validation helper functions
 export function validateOcppMessage(message) {
   try {
@@ -260,6 +272,10 @@ export function validateByAction(action, payload, isRequest = true) {
     RemoteStopTransaction: {
       req: RemoteStopTransactionReqSchema,
       conf: RemoteStopTransactionConfSchema
+    },
+    DataTransfer: {
+      req: DataTransferReqSchema,
+      conf: DataTransferConfSchema
     }
   };
 

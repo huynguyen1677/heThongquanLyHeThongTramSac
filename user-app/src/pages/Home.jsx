@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import "../styles/home-dashboard.css";
 import StationMap from "../components/StationMap";
 import { useCharging } from "../contexts/ChargingContext";
@@ -6,59 +6,139 @@ import StationDetailPopup from "../components/StationDetailPopup";
 import { useAuth } from "../contexts/AuthContext";
 import { countMonthlyCharges, totalMonthlyEnergy, calculateCO2Saved } from "../utils/chargingStats";
 import useChargingHistory from "../contexts/useChargingHistory";
+import { listenUserCharging } from "../services/realtime"; // Import hàm mới
+import ChargingCompleteModal from "../components/ChargingCompleteModal";
 
 function Home() {
   const { stations, stationsLoading: loading, stationsError: error, confirmationRequest, respondConfirmation } = useCharging();
   const { user } = useAuth();
-  const userId = user?.userId || user?.uid; // tuỳ bạn lưu userId là gì
+  const userId = user?.userId || user?.uid;
   const { chargingHistory, loading: historyLoading } = useChargingHistory(userId);
 
   const [selectedStation, setSelectedStation] = useState(null);
-  const [currentCharging, setCurrentCharging] = useState({
-    isCharging: true,
-    station: "Vincom Landmark 81 - Cổng A2",
-    power: "22 kW",
-    time: "45:32",
-    battery: 78,
-    progress: 78
-  });
+  const [currentCharging, setCurrentCharging] = useState(null);
+  const [previousCharging, setPreviousCharging] = useState(null); // Theo dõi phiên sạc trước đó
+  const [showChargingComplete, setShowChargingComplete] = useState(false); // Hiển thị modal kết thúc
+  const [completedSession, setCompletedSession] = useState(null); // Thông tin phiên sạc đã hoàn thành
 
+  // Lắng nghe trạng thái sạc realtime cho userId hiện tại
+  useEffect(() => {
+    if (!userId) return;
+    
+    let previousSessionData = null;
+    
+    const unsubscribe = listenUserCharging(userId, (data) => {
+      console.log('Received data from Firebase:', data);
+      console.log('Previous session data:', previousSessionData);
+      
+      if (data && data.status === "Charging" && data.txId) {
+        // Đang sạc
+        console.log('Currently charging');
+        
+        // Tính thời gian sạc từ txId (timestamp)
+        const startTime = parseInt(data.txId);
+        const elapsed = Math.floor((Date.now() - startTime) / 1000); // giây
+        const minutes = Math.floor(elapsed / 60);
+        const seconds = elapsed % 60;
+        const timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        
+        const chargingData = {
+          isCharging: true,
+          status: data.status,
+          station: `${data.stationId} - Connector ${data.connectorId}`,
+          stationId: data.stationId,
+          connectorId: data.connectorId,
+          power: data.W_now ? `${(data.W_now / 1000).toFixed(1)} kW` : "0.0 kW",
+          time: timeString,
+          battery: data.fullChargeThresholdKwh ? 
+            Math.min(Math.round((data.currentEnergyKwh / data.fullChargeThresholdKwh) * 100), 100) : 0,
+          progress: data.fullChargeThresholdKwh ? 
+            Math.min(Math.round((data.currentEnergyKwh / data.fullChargeThresholdKwh) * 100), 100) : 0,
+          currentEnergyKwh: data.currentEnergyKwh || 0,
+          fullChargeThresholdKwh: data.fullChargeThresholdKwh || 0,
+          session_cost: data.session_cost || 0,
+          costEstimate: data.costEstimate || 0,
+          userId: data.userId,
+          txId: data.txId,
+          lastUpdate: data.lastUpdate,
+          chargeProgress: data.chargeProgress || 0
+        };
+
+        // Lưu dữ liệu phiên sạc hiện tại
+        previousSessionData = { ...chargingData };
+        setCurrentCharging(chargingData);
+      } 
+      else {
+        // Phiên sạc đã kết thúc
+        console.log('Charging session ended');
+        
+        // Nếu trước đó có phiên sạc, hiển thị modal hoàn thành
+        if (previousSessionData && previousSessionData.isCharging) {
+          console.log('Showing completion modal for previous session:', previousSessionData);
+          
+          setCompletedSession({
+            ...previousSessionData,
+            endTime: new Date().toLocaleTimeString('vi-VN'),
+            endDate: new Date().toLocaleDateString('vi-VN')
+          });
+          setShowChargingComplete(true);
+          
+          // Reset previous session data
+          previousSessionData = null;
+        }
+        
+        // Ẩn phần trạng thái sạc hiện tại
+        setCurrentCharging(null);
+      }
+    });
+    
+    return () => {
+      unsubscribe && unsubscribe();
+      // Cleanup khi component unmount
+      previousSessionData = null;
+    };
+  }, [userId]); // Chỉ phụ thuộc vào userId
+
+  // Cập nhật thời gian sạc mỗi giây
+  useEffect(() => {
+    if (!currentCharging || !currentCharging.isCharging || !currentCharging.txId) return;
+
+    const interval = setInterval(() => {
+      const startTime = parseInt(currentCharging.txId);
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      const minutes = Math.floor(elapsed / 60);
+      const seconds = elapsed % 60;
+      const timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      
+      setCurrentCharging(prev => {
+        if (!prev || !prev.isCharging) return prev;
+        return {
+          ...prev,
+          time: timeString
+        };
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [currentCharging?.txId]); // Chỉ phụ thuộc vào txId
+
+  // Tính toán dữ liệu thống kê từ lịch sử sạc thực tế
   const monthlyCharges = countMonthlyCharges(chargingHistory);
   const totalKWh = totalMonthlyEnergy(chargingHistory);
   const co2Saved = calculateCO2Saved(totalKWh);
 
   const userData = {
-    name: user?.name || "Người dùng",
-    walletBalance: user?.walletBalance?.toLocaleString() + "₫" || "0₫",
+    name: user?.displayName || user?.name || "Người dùng",
+    walletBalance: user?.walletBalance?.toLocaleString('vi-VN') + "₫" || "0₫",
     monthlyCharges: monthlyCharges,
-    totalKWh: totalKWh, // hoặc giữ nguyên số thập phân nếu muốn
-    co2Saved: `${co2Saved} kg`,
+    totalKWh: totalKWh.toFixed(1) + " kWh",
+    co2Saved: co2Saved.toFixed(1) + " kg"
   };
 
   // Lọc ra các trạm có đủ latitude và longitude
   const validStations = stations.filter(
     s => typeof s.latitude === "number" && typeof s.longitude === "number"
   );
-
-  // Thay thế recentActivities bằng nearbyStations
-  const nearbyStations = validStations.slice(0, 5).map(station => ({
-    id: station.id,
-    name: station.stationName || station.name || `Trạm ${station.id}`,
-    address: station.address || "Chưa cập nhật địa chỉ",
-    distance: `${(Math.random() * 5 + 0.5).toFixed(1)} km`, // Mock distance
-    status: station.status || (station.online ? 'Available' : 'Offline'),
-    connectorCount: Array.isArray(station.connectors) 
-      ? station.connectors.length 
-      : Object.keys(station.connectors || {}).length,
-    vendor: station.vendor || "Unknown",
-    statusColor: station.online ? 'green' : 'red',
-    icon: station.online ? 'fa-charging-station' : 'fa-exclamation-triangle'
-  }));
-
-  const handleStopCharging = () => {
-    setCurrentCharging(prev => ({ ...prev, isCharging: false }));
-    alert('Đã dừng sạc xe!');
-  };
 
   const handleViewStation = (stationId) => {
     const station = stations.find(s => s.id === stationId);
@@ -67,40 +147,17 @@ function Home() {
     }
   };
 
-  // Simulate charging request after 3 seconds
-  React.useEffect(() => {
-    const timer = setTimeout(() => {
-      if (!currentCharging.isCharging) {
-        setShowChargingDialog(true);
-      }
-    }, 3000);
-    return () => clearTimeout(timer);
-  }, [currentCharging.isCharging]);
+  // Thêm useEffect để debug state changes
+  useEffect(() => {
+    console.log('showChargingComplete changed to:', showChargingComplete);
+    console.log('completedSession:', completedSession);
+  }, [showChargingComplete, completedSession]);
 
-  // Simulate real-time updates
-  React.useEffect(() => {
-    if (!currentCharging.isCharging) return;
-
-    const interval = setInterval(() => {
-      setCurrentCharging(prev => {
-        const [minutes, seconds] = prev.time.split(':').map(Number);
-        let newSeconds = seconds + 1;
-        let newMinutes = minutes;
-        
-        if (newSeconds >= 60) {
-          newSeconds = 0;
-          newMinutes += 1;
-        }
-        
-        return {
-          ...prev,
-          time: `${newMinutes}:${newSeconds.toString().padStart(2, '0')}`
-        };
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [currentCharging.isCharging]);
+  const handleCloseChargingComplete = () => {
+    console.log('Closing charging complete modal');
+    setShowChargingComplete(false);
+    setCompletedSession(null);
+  };
 
   return (
     <div className="dashboard-container">
@@ -155,37 +212,55 @@ function Home() {
         </div>
       </div>
 
-      {/* Current Charging Status */}
-      {currentCharging.isCharging && (
+      {/* Current Charging Status - CHỈ hiển thị khi có dữ liệu thực tế */}
+      {currentCharging && 
+       currentCharging.isCharging && 
+       currentCharging.status === "Charging" && 
+       currentCharging.currentEnergyKwh !== undefined && 
+       currentCharging.fullChargeThresholdKwh > 0 && (
         <div className="charging-card">
           <div className="charging-content">
             <div className="charging-info">
-              <h3 className="charging-title">Trạng thái sạc hiện tại</h3>
+              <h3 className="charging-title">
+                Trạng thái sạc hiện tại
+                <span className="realtime-indicator">
+                  <i className="fas fa-circle" style={{color: '#4CAF50', fontSize: '8px'}}></i>
+                  REALTIME
+                </span>
+              </h3>
               <p className="charging-station">Trạm sạc: {currentCharging.station}</p>
-              
               <div className="charging-stats">
                 <div className="charging-stat">
                   <p className="charging-stat-label">Công suất</p>
                   <p className="charging-stat-value">{currentCharging.power}</p>
                 </div>
                 <div className="charging-stat">
-                  <p className="charging-stat-label">Thời gian</p>
+                  <p className="charging-stat-label">Thời gian sạc</p>
                   <p className="charging-stat-value">{currentCharging.time}</p>
                 </div>
                 <div className="charging-stat">
-                  <p className="charging-stat-label">Pin hiện tại</p>
-                  <p className="charging-stat-value">{currentCharging.battery}%</p>
+                  <p className="charging-stat-label">Tiến độ</p>
+                  <p className="charging-stat-value">{currentCharging.progress}%</p>
+                </div>
+              </div>
+              
+              {/* Thông tin chi tiết */}
+              <div className="charging-details">
+                <div className="detail-row">
+                  <span className="detail-label">Đã sạc:</span>
+                  <span className="detail-value">
+                    {currentCharging.currentEnergyKwh.toFixed(2)} / {currentCharging.fullChargeThresholdKwh} kWh
+                  </span>
+                </div>
+                <div className="detail-row">
+                  <span className="detail-label">Chi phí thực tế:</span>
+                  <span className="detail-value">{currentCharging.session_cost.toLocaleString('vi-VN')}₫</span>
                 </div>
               </div>
             </div>
             
-            <div className="charging-controls">
-              <div className="charging-icon">
-                <i className="fas fa-charging-station"></i>
-              </div>
-              <button className="btn-stop-charging" onClick={handleStopCharging}>
-                Dừng sạc
-              </button>
+            <div className="charging-icon-only">
+              <i className="fas fa-charging-station"></i>
             </div>
           </div>
           
@@ -198,52 +273,18 @@ function Home() {
             <div className="progress-bar">
               <div 
                 className="progress-fill" 
-                style={{ width: `${currentCharging.progress}%` }}
+                style={{ 
+                  width: `${currentCharging.progress}%`,
+                  backgroundColor: '#4CAF50',
+                  transition: 'width 0.3s ease'
+                }}
               ></div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Nearby Stations - thay thế Recent Activity */}
-      <div className="nearby-stations-card">
-        <div className="nearby-stations-header">
-          <h3 className="nearby-stations-title">Trạm sạc gần đây</h3>
-          <span className="stations-count">{nearbyStations.length} trạm</span>
-        </div>
-        
-        <div className="nearby-stations-list">
-          {nearbyStations.map(station => (
-            <div key={station.id} className="station-item" onClick={() => handleViewStation(station.id)}>
-              <div className="station-item-icon">
-                <div className={`station-status-dot status-${station.statusColor}`}></div>
-                <i className={`fas ${station.icon}`}></i>
-              </div>
-              <div className="station-item-content">
-                <div className="station-item-header">
-                  <h4 className="station-item-name">{station.name}</h4>
-                  <span className="station-item-distance">{station.distance}</span>
-                </div>
-                <p className="station-item-address">{station.address}</p>
-                <div className="station-item-meta">
-                  <span className={`station-status status-${station.statusColor}`}>
-                    {station.status}
-                  </span>
-                  <span className="station-connectors">
-                    {station.connectorCount} cổng sạc
-                  </span>
-                  <span className="station-vendor">{station.vendor}</span>
-                </div>
-              </div>
-              <div className="station-item-action">
-                <i className="fas fa-chevron-right"></i>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Map Section - giữ nguyên */}
+      {/* Map Section */}
       <div className="map-section">
         <div className="map-header">
           <h3 className="map-title">Bản đồ trạm sạc</h3>
@@ -253,13 +294,20 @@ function Home() {
         </div>
       </div>
 
-      {/* Station Detail Popup - giữ nguyên */}
+      {/* Station Detail Popup */}
       {selectedStation && (
         <StationDetailPopup
           station={selectedStation}
           onClose={() => setSelectedStation(null)}
         />
       )}
+
+      {/* Charging Complete Modal */}
+      <ChargingCompleteModal
+        session={completedSession}
+        open={showChargingComplete}
+        onClose={handleCloseChargingComplete}
+      />
     </div>
   );
 }

@@ -764,6 +764,28 @@ class RealtimeService {
       logger.info(`🚫 Stopped listening for user ${userId} response`);
     };
   }
+
+  // Cập nhật ngưỡng sạc đầy cho connector
+  async updateConnectorThreshold(stationId, connectorId, fullChargeThresholdKwh, currentEnergyKwh) {
+    if (!this.isAvailable()) return false;
+
+    try {
+      const connectorRef = this.db.ref(`live/stations/${stationId}/connectors/${connectorId}`);
+      const updateData = {
+        fullChargeThresholdKwh: fullChargeThresholdKwh,
+        currentEnergyKwh: Math.round(currentEnergyKwh * 100) / 100,
+        chargeProgress: Math.min(100, Math.round((currentEnergyKwh / fullChargeThresholdKwh) * 100)),
+        lastUpdate: getTimestamp()
+      };
+
+      await connectorRef.update(updateData);
+      logger.debug(`✅ Updated connector threshold: ${stationId}/${connectorId} - ${fullChargeThresholdKwh}kWh`);
+      return true;
+    } catch (error) {
+      logger.error('Error updating connector threshold:', error);
+      return false;
+    }
+  }
 }
 
 export const realtimeService = new RealtimeService();

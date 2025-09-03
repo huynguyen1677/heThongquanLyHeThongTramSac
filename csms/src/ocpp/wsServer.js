@@ -172,6 +172,9 @@ export class OcppWebSocketServer {
       case 'MeterValues':
         this.handleMeterValues(stationId, messageId, payload);
         break;
+      case 'DataTransfer':
+        await this.handleDataTransfer(stationId, messageId, payload);
+        break;
       default:
         this.sendCallError(stationId, messageId, 'NotSupported', `Action ${action} not supported`);
     }
@@ -504,6 +507,33 @@ export class OcppWebSocketServer {
     sessions.addMeterValues(stationId, payload.connectorId, payload.meterValue, payload.transactionId);
 
     this.sendCallResult(stationId, messageId, {});
+  }
+
+  async handleDataTransfer(stationId, messageId, payload) {
+    logger.info(`DataTransfer from ${stationId}:`, payload);
+    
+    try {
+      if (payload.vendorId === 'RealtimeUpdate' && payload.messageId === 'ChargeThreshold') {
+        const data = JSON.parse(payload.data);
+        
+        // Cập nhật ngưỡng sạc đầy lên Firebase Realtime Database
+        await realtimeService.updateConnectorThreshold(
+          stationId,
+          data.connectorId,
+          data.fullChargeThresholdKwh,
+          data.currentEnergyKwh
+        );
+        
+        logger.info(`✅ Updated charge threshold for ${stationId}/${data.connectorId}: ${data.fullChargeThresholdKwh}kWh`);
+        
+        this.sendCallResult(stationId, messageId, { status: 'Accepted' });
+      } else {
+        this.sendCallResult(stationId, messageId, { status: 'UnknownVendorId' });
+      }
+    } catch (error) {
+      logger.error(`❌ Error processing DataTransfer from ${stationId}:`, error);
+      this.sendCallResult(stationId, messageId, { status: 'Rejected' });
+    }
   }
 
   handleDisconnection(stationId) {

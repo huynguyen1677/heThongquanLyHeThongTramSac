@@ -10,6 +10,7 @@ const INITIAL_STATS = {
   duration: '00:00:00',
   estimatedCost: 0,
   isRunning: false,
+  fullChargeThresholdKwh: 2, // Lấy từ MeterTimer
 };
 
 const ConnectorCard = ({
@@ -253,7 +254,8 @@ const ConnectorCard = ({
       'SuspendedEVSE': { color: 'orange', emoji: '🟠', text: 'Trạm tạm dừng' },
       'Finishing': { color: 'orange', emoji: '🟠', text: 'Kết thúc' },
       'Unavailable': { color: 'gray', emoji: '⚫', text: 'Không khả dụng' },
-      'Faulted': { color: 'red', emoji: '🔴', text: 'Lỗi' }
+      'Faulted': { color: 'red', emoji: '🔴', text: 'Lỗi' },
+      'FullyCharged': { color: 'teal', emoji: '✅', text: 'Sạc đầy' } // Thêm trạng thái sạc đầy
     };
 
     const config = statusConfig[status] || statusConfig['Available'];
@@ -270,6 +272,14 @@ const ConnectorCard = ({
         <h3>🔌 Connector {connectorId}</h3>
         {getStatusBadge()}
       </div>
+
+      {/* Thêm thông báo nổi bật khi sạc đầy */}
+      {status === 'FullyCharged' && (
+        <div className="full-charged-notice">
+          <span role="img" aria-label="full">🔋</span>
+          <b>Xe đã sạc đầy!</b>
+        </div>
+      )}
 
       {/* Simple ID Tag Input */}
       <div className="id-tag-section">
@@ -407,41 +417,39 @@ const ConnectorCard = ({
         </div>
       </div>
 
-      {/* Charging Info */}
-      {(status === 'Charging' || status === 'SuspendedEV' || status === 'SuspendedEVSE' || transactionId) && (
+      {/* Charging Info - Luôn hiển thị nếu có transactionId */}
+      {transactionId && (
         <div className="charging-info">
-          <h4>📊 Thông tin sạc</h4>
-          <div className="info-grid">
-            <div className="info-item">
-              <label>ID Giao dịch:</label>
-              <span>{stats.transactionId || transactionId || 'N/A'}</span>
+          <h4>📊 Quá trình sạc</h4>
+          {/* Progress bar với số kWh đã sạc và phần trăm */}
+          <div className="charging-progress-bar">
+            <div
+              className="charging-progress"
+              style={{
+                width: `${Math.min(stats.energyKwh / (stats.fullChargeThresholdKwh || 2) * 100, 100)}%`,
+                background: status === 'FullyCharged' ? '#38b2ac' : '#2563eb'
+              }}
+            ></div>
+          </div>
+          <div className="charging-progress-label">
+            Đã sạc: <b>{stats.energyKwh.toFixed(2)} kWh</b> / <b>{stats.fullChargeThresholdKwh || 2} kWh</b>
+            ({Math.min(stats.energyKwh / (stats.fullChargeThresholdKwh || 2) * 100, 100).toFixed(1)}%)
+          </div>
+          <div className="charging-time-label">
+            Thời gian sạc: <b>{stats.duration}</b>
+          </div>
+          <div className="charging-details-grid">
+            <div>
+              <span className="charging-detail-label">Công suất hiện tại:</span>
+              <span className="charging-detail-value">{stats.powerKw} kW</span>
             </div>
-            <div className="info-item">
-              <label>Đã sạc:</label>
-              <span>{stats.energyKwh.toFixed(3)} kWh</span>
+            <div>
+              <span className="charging-detail-label">Giá ước tính:</span>
+              <span className="charging-detail-value">{stats.estimatedCost} ₫</span>
             </div>
-            <div className="info-item">
-              <label>Công suất hiện tại:</label>
-              <span>{stats.powerKw} kW</span>
-            </div>
-            <div className="info-item">
-              <label>Thời gian sạc:</label>
-              <span>{stats.duration}</span>
-            </div>
-            <div className="info-item">
-              <label>Tổng Kwh của trạm:</label>
-              <span>{(stats.currentMeterValue / 1000).toFixed(3)} kWh</span>
-            </div>
-            <div className="info-item">
-              <label>Giá ước tính:</label>
-              <span>{stats.estimatedCost} ₫</span>
-            </div>
-            <div className="info-item">
-              <label>User đang sạc:</label>
-              <span>
-                {/* Ưu tiên lấy idTag từ transaction, nếu không có thì lấy từ preCheck */}
-                {stats.idTag || preCheck.confirmationCode || 'N/A'}
-              </span>
+            <div>
+              <span className="charging-detail-label">User đang sạc:</span>
+              <span className="charging-detail-value">{stats.idTag || preCheck.confirmationCode || 'N/A'}</span>
             </div>
           </div>
         </div>
