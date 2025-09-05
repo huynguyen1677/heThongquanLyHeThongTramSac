@@ -4,11 +4,12 @@ import {
   createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
-  updateProfile
+  updateProfile as updateFirebaseProfile // Đổi tên import để tránh xung đột
 } from 'firebase/auth'
 import { doc, setDoc, getDoc, updateDoc, runTransaction } from 'firebase/firestore'
 import { auth, db } from '../services/firebase'
-import { use } from 'react'
+import { ref, onValue, set } from 'firebase/database' // Thay update bằng set
+import { realtimeDb } from '../services/firebase'
 
 const AuthContext = createContext()
 
@@ -39,7 +40,7 @@ export const AuthProvider = ({ children }) => {
             phone: userData.phone || null,
             createdAt: userData.createdAt || firebaseUser.metadata.creationTime,
             ...userData,
-            userId: userData.userId ? userData.userId.toString().padStart(6, '0') : undefined // Đảm bảo là chuỗi 6 số
+            userId: userData.userId ? userData.userId.toString().padStart(6, '0') : undefined
           }
           
           setUser(user)
@@ -59,6 +60,27 @@ export const AuthProvider = ({ children }) => {
 
     return unsubscribe
   }, [])
+
+  useEffect(() => {
+    if (!user?.userId) return;
+    
+    // Lắng nghe thay đổi số dư ví từ Firebase
+    const walletRef = ref(realtimeDb, `users/${user.userId}/walletBalance`);
+    
+    const unsubscribe = onValue(walletRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const newBalance = snapshot.val();
+        console.log('💰 Wallet balance updated:', newBalance);
+        
+        setUser(prev => ({
+          ...prev,
+          walletBalance: newBalance
+        }));
+      }
+    });
+    
+    return () => unsubscribe();
+  }, [user?.userId])
 
   const login = async (email, password) => {
     try {
@@ -100,12 +122,11 @@ export const AuthProvider = ({ children }) => {
 
       // Lấy userId số tự tăng
       let numericUserId = await getNextUserId()
-      // Format thành chuỗi 6 số, thêm số 0 ở đầu nếu cần
       const userId = numericUserId.toString().padStart(6, '0')
 
-      // Cập nhật displayName
+      // Cập nhật displayName - sử dụng tên đã import
       if (name) {
-        await updateProfile(firebaseUser, { displayName: name }) // của Firebase Auth
+        await updateFirebaseProfile(firebaseUser, { displayName: name })
       }
 
       // Lưu thông tin user vào Firestore
@@ -114,7 +135,7 @@ export const AuthProvider = ({ children }) => {
         name,
         phone: phone || null,
         role: 'user',
-        userId, // Lưu userId dạng chuỗi 6 số
+        userId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         walletBalance: 100000 // Tặng 100k khi đăng ký mới
@@ -159,13 +180,14 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  const updateProfile = async (userData) => {
+  // Đổi tên hàm để tránh xung đột
+  const updateUserProfile = async (userData) => {
     try {
       if (!user) throw new Error('User not authenticated')
       
       // Cập nhật Firebase Auth profile nếu có displayName
       if (userData.name && userData.name !== user.name) {
-        await updateProfile(auth.currentUser, { displayName: userData.name })
+        await updateFirebaseProfile(auth.currentUser, { displayName: userData.name })
       }
       
       // Cập nhật Firestore
@@ -208,7 +230,7 @@ export const AuthProvider = ({ children }) => {
     login,
     register,
     logout,
-    updateProfile,
+    updateProfile: updateUserProfile, // Export với tên mới
     getNextUserId
   }
 

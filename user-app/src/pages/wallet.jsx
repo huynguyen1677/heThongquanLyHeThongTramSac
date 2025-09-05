@@ -1,6 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Link } from 'react-router-dom';
+import { ref, onValue, set } from 'firebase/database';
+import { realtimeDb } from '../services/firebase';
 import '../styles/wallet-page.css';
 
 function Wallet() {
@@ -11,13 +13,44 @@ function Wallet() {
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('momo');
   const [showDepositModal, setShowDepositModal] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [transactions, setTransactions] = useState([]); // State to store transactions
 
-  // Mock data - trong thực tế sẽ lấy từ API
+  // Thêm vào function Wallet(), sau khi có transactions
+  const walletStats = useMemo(() => {
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+    
+    let monthlySpent = 0;
+    let totalDeposited = 0;
+    let totalWithdrawn = 0;
+    
+    transactions.forEach(transaction => {
+      const transactionDate = new Date(transaction.date);
+      
+      if (transaction.type === 'deposit' && transaction.status === 'completed') {
+        totalDeposited += Math.abs(transaction.amount);
+      }
+      
+      if (transaction.type === 'withdraw' && transaction.status === 'completed') {
+        totalWithdrawn += Math.abs(transaction.amount);
+      }
+      
+      if (transaction.type === 'payment' && transaction.status === 'completed' &&
+          transactionDate.getMonth() === currentMonth && 
+          transactionDate.getFullYear() === currentYear) {
+        monthlySpent += Math.abs(transaction.amount);
+      }
+    });
+    
+    return { monthlySpent, totalDeposited, totalWithdrawn };
+  }, [transactions]);
+
+  // Cập nhật walletData
   const walletData = {
-    balance: 1250000, // VND
-    monthlySpent: 450000,
-    totalDeposited: 2500000,
-    totalWithdrawn: 800000,
+    balance: user?.walletBalance || 0,
+    monthlySpent: walletStats.monthlySpent,
+    totalDeposited: walletStats.totalDeposited,
+    totalWithdrawn: walletStats.totalWithdrawn,
     pendingAmount: 0,
     lastUpdated: new Date()
   };
@@ -59,60 +92,6 @@ function Wallet() {
     }
   ];
 
-  // Mock transaction history
-  const transactions = [
-    {
-      id: 1,
-      type: 'deposit',
-      amount: 500000,
-      method: 'Ví MoMo',
-      status: 'completed',
-      date: new Date(2024, 0, 15, 14, 30),
-      description: 'Nạp tiền vào ví',
-      reference: 'DP001234'
-    },
-    {
-      id: 2,
-      type: 'payment',
-      amount: -75000,
-      method: 'Thanh toán sạc',
-      status: 'completed',
-      date: new Date(2024, 0, 14, 9, 15),
-      description: 'Thanh toán phiên sạc tại Vincom Landmark 81',
-      reference: 'PAY5678'
-    },
-    {
-      id: 3,
-      type: 'deposit',
-      amount: 200000,
-      method: 'ZaloPay',
-      status: 'completed',
-      date: new Date(2024, 0, 12, 16, 45),
-      description: 'Nạp tiền vào ví',
-      reference: 'DP001235'
-    },
-    {
-      id: 4,
-      type: 'payment',
-      amount: -120000,
-      method: 'Thanh toán sạc',
-      status: 'completed',
-      date: new Date(2024, 0, 10, 11, 20),
-      description: 'Thanh toán phiên sạc tại Diamond Plaza',
-      reference: 'PAY5679'
-    },
-    {
-      id: 5,
-      type: 'withdraw',
-      amount: -300000,
-      method: 'Chuyển khoản',
-      status: 'pending',
-      date: new Date(2024, 0, 8, 13, 10),
-      description: 'Rút tiền về tài khoản ngân hàng',
-      reference: 'WD001236'
-    }
-  ];
-
   const filteredTransactions = useMemo(() => {
     return transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [transactions]);
@@ -145,6 +124,38 @@ function Wallet() {
     setShowWithdrawModal(false);
     setWithdrawAmount('');
   };
+
+  // Thêm vào Wallet.jsx để tự động refresh khi có giao dịch mới
+  useEffect(() => {
+    // Lắng nghe giao dịch mới từ Firebase
+    if (!user?.userId) return;
+    
+    const transactionsRef = ref(realtimeDb, `transactions/${user.userId}`);
+    
+    const unsubscribe = onValue(transactionsRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const firebaseTransactions = Object.values(snapshot.val());
+        // Cập nhật danh sách giao dịch
+        setTransactions(firebaseTransactions);
+      }
+    });
+    
+    return () => unsubscribe();
+  }, [user?.userId]);
+
+  // Thêm useEffect để thông báo khi có giao dịch mới
+  useEffect(() => {
+    if (transactions.length > 0) {
+      const latestTransaction = transactions[0];
+      const transactionTime = new Date(latestTransaction.date);
+      const now = new Date();
+      
+      // Nếu giao dịch được tạo trong vòng 5 giây qua
+      if (now - transactionTime < 5000 && latestTransaction.type === 'payment') {
+        console.log('💰 New payment transaction detected:', latestTransaction);
+      }
+    }
+  }, [transactions]);
 
   if (!user) {
     return (
@@ -511,6 +522,39 @@ const TransactionItem = ({ transaction }) => {
     };
   };
 
+  // Hàm format date an toàn
+  const formatTransactionDate = (date) => {
+    try {
+      let dateObj;
+      
+      if (date instanceof Date) {
+        dateObj = date;
+      } else if (typeof date === 'string') {
+        dateObj = new Date(date);
+      } else if (typeof date === 'number') {
+        dateObj = new Date(date);
+      } else {
+        dateObj = new Date(); // Fallback
+      }
+
+      if (isNaN(dateObj.getTime())) {
+        dateObj = new Date(); // Fallback nếu date không hợp lệ
+      }
+
+      return dateObj.toLocaleDateString('vi-VN', { 
+        weekday: 'short',
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return new Date().toLocaleDateString('vi-VN');
+    }
+  };
+
   const config = getTransactionConfig(transaction.type, transaction.status);
 
   return (
@@ -528,21 +572,14 @@ const TransactionItem = ({ transaction }) => {
             <span className="transaction-reference">#{transaction.reference}</span>
           </div>
           <p className="transaction-date">
-            {transaction.date.toLocaleDateString('vi-VN', { 
-              weekday: 'short',
-              year: 'numeric', 
-              month: 'short', 
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
-            })}
+            {formatTransactionDate(transaction.date)}
           </p>
         </div>
       </div>
       
       <div className="transaction-right">
         <p className={`transaction-amount ${config.amountClass}`}>
-          {transaction.amount > 0 ? '+' : ''}{transaction.amount.toLocaleString()}₫
+          {transaction.amount > 0 ? '+' : ''}{Math.abs(transaction.amount).toLocaleString()}₫
         </p>
         <span className={`transaction-status ${config.statusClass}`}>
           {transaction.status === 'completed' && 'Hoàn thành'}

@@ -4,15 +4,8 @@ import { useAuth } from '../contexts/AuthContext'
 import { useCharging } from '../contexts/ChargingContext'
 import { format } from 'date-fns'
 import { vi } from 'date-fns/locale'
+import { countTotalSessions, filterCompletedSessions } from '../utils/chargingStats';
 import '../styles/history-page.css'
-import SessionCard from "../components/SessionCard";
-import {
-  countTotalSessions,
-  filterCompletedSessions,
-  totalAllEnergy,
-  totalAllCost,
-  averageSessionDuration
-} from '../utils/chargingStats';
 
 function History() {
   const { user } = useAuth()
@@ -27,22 +20,13 @@ function History() {
   const filteredSessions = useMemo(() => {
     if (!Array.isArray(chargingHistory)) return [];
     return chargingHistory.filter(session => {
-      // Sửa bộ lọc trạng thái
-      let matchesStatus = true;
-      if (statusFilter !== 'all') {
-        const status = (session.status || '').toLowerCase();
-        if (statusFilter === 'Completed') {
-          // Nhận tất cả trạng thái hoàn thành
-          matchesStatus = ['completed', 'finished', 'success'].includes(status);
-        } else {
-          matchesStatus = status === statusFilter.toLowerCase();
-        }
-      }
-
+      const matchesStatus = statusFilter === 'all' || session.status === statusFilter
+      
       const matchesDate = dateFilter === 'all' || (() => {
         const sessionDate = new Date(session.startTime)
         const now = new Date()
         const daysDiff = Math.floor((now - sessionDate) / (1000 * 60 * 60 * 24))
+        
         switch (dateFilter) {
           case '7d': return daysDiff <= 7
           case '30d': return daysDiff <= 30
@@ -70,16 +54,23 @@ function History() {
     const totalSessions = countTotalSessions(filteredSessions);
     const completedSessionsArr = filterCompletedSessions(filteredSessions);
 
-    const totalEnergykWh = totalAllEnergy(filteredSessions);
-    const totalCost = totalAllCost(filteredSessions);
-    const avgDuration = averageSessionDuration(filteredSessions);
-
+    const totalEnergyWh = completedSessionsArr.reduce((sum, s) => {
+      const energyWh = typeof s.energyConsumed === "number" 
+        ? s.energyConsumed 
+        : parseFloat(s.energyConsumed || 0);
+      return sum + (isNaN(energyWh) ? 0 : energyWh);
+    }, 0);
+    const totalEnergykWh = totalEnergyWh / 1000;
+    
+    const totalCost = completedSessionsArr.reduce((sum, s) => sum + (s.estimatedCost || s.cost || 0), 0);
+    const totalDuration = completedSessionsArr.reduce((sum, s) => sum + (s.duration || 0), 0);
+    
     return {
       totalSessions,
       completedSessions: completedSessionsArr.length,
-      totalEnergy: totalEnergykWh,
+      totalEnergy: totalEnergykWh.toFixed(2),
       totalCost: Math.round(totalCost),
-      avgDuration
+      avgDuration: completedSessionsArr.length > 0 ? Math.round(totalDuration / completedSessionsArr.length) : 0
     };
   }, [filteredSessions])
 
@@ -341,6 +332,175 @@ function History() {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// Enhanced Session Card Component
+const SessionCard = ({ session, viewMode }) => {
+  const getStatusConfig = (status) => {
+    switch (status) {
+      case 'Charging':
+        return { 
+          class: 'status-charging', 
+          icon: 'fa-bolt',
+          text: 'Đang sạc',
+          color: 'warning'
+        }
+      case 'Completed':
+        return { 
+          class: 'status-completed', 
+          icon: 'fa-check-circle',
+          text: 'Hoàn thành',
+          color: 'success'
+        }
+      case 'Cancelled':
+        return { 
+          class: 'status-cancelled', 
+          icon: 'fa-times-circle',
+          text: 'Đã hủy',
+          color: 'secondary'
+        }
+      case 'Failed':
+        return { 
+          class: 'status-failed', 
+          icon: 'fa-exclamation-triangle',
+          text: 'Thất bại',
+          color: 'error'
+        }
+      default:
+        return { 
+          class: 'status-unknown', 
+          icon: 'fa-question-circle',
+          text: status,
+          color: 'secondary'
+        }
+    }
+  }
+
+  const formatDuration = (minutes) => {
+    if (!minutes) return '0 phút'
+    
+    const hours = Math.floor(minutes / 60)
+    const mins = Math.round(minutes % 60)
+    
+    if (hours > 0) {
+      return `${hours}h ${mins > 0 ? mins + 'm' : ''}`
+    }
+    return `${mins}m`
+  }
+
+  const statusConfig = getStatusConfig(session.status)
+
+  return (
+    <div className={`session-card ${viewMode} ${statusConfig.class}`}>
+      <div className="session-card-header">
+        <div className="session-status">
+          <div className={`status-indicator status-${statusConfig.color}`}>
+            <i className={`fas ${statusConfig.icon}`}></i>
+          </div>
+          <span className={`status-text status-${statusConfig.color}`}>
+            {statusConfig.text}
+          </span>
+        </div>
+        <div className="session-actions">
+          {session.status === 'Charging' && (
+            <Link
+              to={`/charging/${session.stationId}/${session.connectorId}`}
+              className="btn btn-primary btn-sm"
+              title="Xem chi tiết phiên sạc"
+            >
+              <i className="fas fa-eye"></i>
+            </Link>
+          )}
+          <button className="session-menu-btn" title="Tùy chọn khác">
+            <i className="fas fa-ellipsis-v"></i>
+          </button>
+        </div>
+      </div>
+
+      <div className="session-card-content">
+        <div className="session-main-info">
+          <h3 className="session-station-name">
+            <i className="fas fa-charging-station"></i>
+            {session.stationName || session.stationId || 'Trạm không xác định'}
+          </h3>
+          <p className="session-station-address">
+            <i className="fas fa-map-marker-alt"></i>
+            {session.stationAddress || session.address || 'Địa chỉ không xác định'}
+          </p>
+        </div>
+
+        <div className="session-details">
+          <div className="session-detail-row">
+            <div className="detail-item">
+              <i className="fas fa-plug"></i>
+              <span>Cổng {session.connectorId || 'N/A'}</span>
+            </div>
+            <div className="detail-item">
+              <i className="fas fa-bolt"></i>
+              <span>
+                {session.connectorType || 'AC'} - {session.power || session.powerKW || 'N/A'}kW
+              </span>
+            </div>
+            {session.duration > 0 && (
+              <div className="detail-item">
+                <i className="fas fa-clock"></i>
+                <span>{formatDuration(session.duration)}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="session-time-info">
+            <div className="time-item">
+              <span className="time-label">Bắt đầu:</span>
+              <span className="time-value">
+                {session.startTime ? 
+                  format(new Date(session.startTime), 'HH:mm - dd/MM/yyyy', { locale: vi }) :
+                  'N/A'
+                }
+              </span>
+            </div>
+            {session.endTime && (
+              <div className="time-item">
+                <span className="time-label">Kết thúc:</span>
+                <span className="time-value">
+                  {format(new Date(session.endTime), 'HH:mm - dd/MM/yyyy', { locale: vi })}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="session-card-footer">
+        <div className="session-metrics">
+          <div className="metric-item energy">
+            <div className="metric-icon">
+              <i className="fas fa-battery-three-quarters"></i>
+            </div>
+            <div className="metric-info">
+              <span className="metric-label">Năng lượng</span>
+              <span className="metric-value">
+                {/* Chuyển đổi từ Wh sang kWh */}
+                {((session.energyConsumed || 0) / 1000).toFixed(2)} kWh
+              </span>
+            </div>
+          </div>
+          
+          <div className="metric-item cost">
+            <div className="metric-icon">
+              <i className="fas fa-coins"></i>
+            </div>
+            <div className="metric-info">
+              <span className="metric-label">Chi phí</span>
+              <span className="metric-value">
+                {(session.estimatedCost || session.cost || session.totalCost || 0).toLocaleString()}₫
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

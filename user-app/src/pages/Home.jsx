@@ -131,7 +131,7 @@ function Home() {
     name: user?.displayName || user?.name || "Người dùng",
     walletBalance: user?.walletBalance?.toLocaleString('vi-VN') + "₫" || "0₫",
     monthlyCharges: monthlyCharges,
-    totalKWh: totalKWh.toFixed(1) + " kWh",
+    totalKWh: totalKWh + " kWh",
     co2Saved: co2Saved.toFixed(1) + " kg"
   };
 
