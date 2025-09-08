@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import './ConnectorCard.css';
 
-
 const INITIAL_STATS = {
   transactionId: null,
   currentMeterValue: 0,
@@ -10,134 +9,142 @@ const INITIAL_STATS = {
   duration: '00:00:00',
   estimatedCost: 0,
   isRunning: false,
-  fullChargeThresholdKwh: 2, // Lấy từ MeterTimer
+  fullChargeThresholdKwh: 2,
+  pricePerKwh: 0,
+  idTag: null
 };
 
 const ConnectorCard = ({
   connectorId,
   status,
   transactionId,
-  meterTimer,
+  meterService,
   onLocalStart,
   onLocalStop,
   onStatusChange,
-  isConnected
+  isConnected,
+  performSafetyCheck,
+  disabled = false
 }) => {
-  const [preCheck, setPreCheck] = useState({
-    parked: false,
-    plugged: false,
-    confirmationCode: '',
-    confirmed: false
-  });
-
   const [powerKw, setPowerKw] = useState(11);
   const [stats, setStats] = useState(INITIAL_STATS);
+  const [safetyCheck, setSafetyCheck] = useState({
+    parked: false,
+    plugged: false,
+    confirmed: false,
+    confirmationCode: ''
+  });
 
-  // Cập nhật giá điện từ API khi component mount
-  useEffect(() => {
-    const updatePriceFromApi = async () => {
-      if (meterTimer) {
-        try {
-          const apiUrl = 'http://localhost:3000/api/settings/price-per-kwh';
-          await meterTimer.updatePricePerKwhFromApi(apiUrl);
-          // Cập nhật stats ngay sau khi cập nhật giá điện
-          setStats(meterTimer.getChargingStats());
-        } catch (error) {
-          console.error('Lỗi khi cập nhật giá điện:', error);
-        }
-      }
-    };
-
-    updatePriceFromApi();
-  }, [meterTimer]);
-
-  // Update stats from meter timer
+  // Update stats from meter service
   useEffect(() => {
     let interval = null;
 
-    // Cập nhật stats ban đầu
-    if (meterTimer) {
-      setStats(meterTimer.getChargingStats());
+    // Kiểm tra meterService tồn tại và có method getChargingStats
+    if (meterService && typeof meterService.getChargingStats === 'function') {
+      try {
+        const newStats = meterService.getChargingStats();
+        if (newStats && typeof newStats === 'object') {
+          setStats(prevStats => ({ ...prevStats, ...newStats }));
+        }
+      } catch (error) {
+        console.warn(`⚠️ [ConnectorCard-${connectorId}] Error getting initial charging stats:`, error);
+        setStats(INITIAL_STATS);
+      }
     }
 
-    // Chỉ chạy interval khi đang ở trạng thái 'Charging' (không chạy khi suspend)
-    if (status === 'Charging' && meterTimer?.isActive()) {
-      // Cập nhật trạng thái mỗi giây
+    // Set up interval for charging status
+    if (status === 'Charging' && meterService?.isActive()) {
       interval = setInterval(() => {
-        setStats(meterTimer.getChargingStats());
+        try {
+          if (meterService && typeof meterService.getChargingStats === 'function') {
+            const newStats = meterService.getChargingStats();
+            if (newStats && typeof newStats === 'object') {
+              setStats(prevStats => ({ ...prevStats, ...newStats }));
+            }
+          }
+        } catch (error) {
+          console.warn(`⚠️ [ConnectorCard-${connectorId}] Error updating charging stats:`, error);
+        }
       }, 1000);
-    } else if (meterTimer && (status === 'Available' || status === 'SuspendedEV' || status === 'SuspendedEVSE')) {
-      // Nếu không sạc nhưng có meterTimer, vẫn hiển thị thông tin cơ bản (giá điện)
-      // Hoặc khi suspend thì vẫn hiển thị thông tin nhưng không tăng
-      setStats(meterTimer.getChargingStats());
-    } else {
-      // Nếu không có meterTimer, reset lại các thông số
-      setStats(INITIAL_STATS);
     }
 
-    // Hàm dọn dẹp: sẽ được gọi khi component unmount hoặc khi các dependency thay đổi
     return () => {
       if (interval) {
         clearInterval(interval);
       }
     };
-  }, [status, meterTimer]); // Thêm `status` vào dependency array
+  }, [status, meterService, connectorId]);
 
-  const handlePreCheckChange = async (field, value) => {
-    const newPreCheck = { ...preCheck, [field]: value };
-    setPreCheck(newPreCheck);
-    
-    // Kiểm tra xem tất cả safety check đã hoàn thành chưa (trừ confirmed vì nó cần mã xác nhận)
-    if (field !== 'confirmationCode' && field !== 'confirmed' && 
-        newPreCheck.parked && newPreCheck.plugged && newPreCheck.confirmed && 
-        status === 'Available') {
+  // Reset stats when no transaction
+  useEffect(() => {
+    if (!transactionId) {
+      setStats(INITIAL_STATS);
+    }
+  }, [transactionId]);
+
+  // Safety check completion effect
+  useEffect(() => {
+    if (
+      safetyCheck.parked &&
+      safetyCheck.plugged &&
+      safetyCheck.confirmed &&
+      status === 'Available' &&
+      isConnected &&
+      typeof performSafetyCheck === 'function'
+    ) {
       try {
-        console.log(`🔒 All safety checks completed for connector ${connectorId}:`, newPreCheck);
-        
-        // Ngay lập tức chuyển sang Preparing và gửi qua CSMS
-        await onStatusChange(connectorId, 'Preparing', newPreCheck);
-        
-        console.log(`✅ Connector ${connectorId} moved to Preparing status`);
+        performSafetyCheck(connectorId, safetyCheck);
       } catch (error) {
-        console.error(`❌ Error updating status to Preparing:`, error);
-        alert(`Lỗi khi cập nhật trạng thái: ${error.message}`);
+        console.error(`❌ [ConnectorCard-${connectorId}] Safety check error:`, error);
       }
     }
-  };
+  }, [safetyCheck, status, performSafetyCheck, connectorId, isConnected]);
 
+  // Helper functions for button states
   const canStop = () => {
-    return status === 'Charging' && transactionId && isConnected;
+    return status === 'Charging' && transactionId && isConnected && !disabled;
   };
 
   const canSuspend = () => {
-    return status === 'Charging' && transactionId && isConnected;
+    return status === 'Charging' && transactionId && isConnected && !disabled;
   };
 
   const canResume = () => {
-    return (status === 'SuspendedEV' || status === 'SuspendedEVSE') && transactionId && isConnected;
+    return (status === 'SuspendedEV' || status === 'SuspendedEVSE') && 
+           transactionId && isConnected && !disabled;
   };
 
   const canDisconnectCable = () => {
     return (status === 'Charging' || status === 'SuspendedEV' || status === 'SuspendedEVSE') && 
-           transactionId && isConnected;
+           transactionId && isConnected && !disabled;
   };
 
+  const canStartCharging = () => {
+    return status === 'Preparing' && 
+           safetyCheck.confirmationCode.length === 6 && 
+           isConnected && !disabled;
+  };
+
+  // Event handlers
   const handleLocalStart = async () => {
-    // Kiểm tra ID Tag đã nhập chưa
-    if (!preCheck.confirmationCode || preCheck.confirmationCode.length !== 6) {
+    // Validation
+    if (!canStartCharging()) {
+      return;
+    }
+
+    if (!safetyCheck.confirmationCode || safetyCheck.confirmationCode.length !== 6) {
       alert('Vui lòng nhập User ID (6 số) trước khi bắt đầu sạc!');
       return;
     }
 
     try {
-      console.log(`🚀 Starting charging for connector ${connectorId} with User ID: ${preCheck.confirmationCode}`);
+      console.log(`🚀 [ConnectorCard-${connectorId}] Starting charging with User ID: ${safetyCheck.confirmationCode}`);
       
-      // Gửi StartTransaction trực tiếp với ID Tag
-      await onLocalStart(connectorId, powerKw, preCheck.confirmationCode);
+      await onLocalStart(connectorId, powerKw, safetyCheck.confirmationCode);
       
-      console.log(`✅ Charging request sent for connector ${connectorId}`);
+      console.log(`✅ [ConnectorCard-${connectorId}] Charging request sent successfully`);
     } catch (error) {
-      console.error(`❌ Error starting charge for connector ${connectorId}:`, error);
+      console.error(`❌ [ConnectorCard-${connectorId}] Error starting charge:`, error);
       alert(`Lỗi khi bắt đầu sạc: ${error.message}`);
     }
   };
@@ -148,90 +155,95 @@ const ConnectorCard = ({
     }
 
     try {
+      console.log(`⏹️ [ConnectorCard-${connectorId}] Stopping charging`);
       await onLocalStop(connectorId);
+      console.log(`✅ [ConnectorCard-${connectorId}] Charging stopped successfully`);
     } catch (error) {
+      console.error(`❌ [ConnectorCard-${connectorId}] Error stopping charge:`, error);
       alert(`Lỗi khi dừng sạc: ${error.message}`);
     }
   };
 
   const handleSuspendEV = async () => {
-    if (!canSuspend()) {
-      return;
-    }
+    if (!canSuspend()) return;
 
     try {
-      console.log(`� [DEBUG] handleSuspendEV called for connector ${connectorId}, onStatusChange:`, typeof onStatusChange);
-      console.log(`�🚗 Suspending charging due to EV request for connector ${connectorId}`);
+      console.log(`🚗 [ConnectorCard-${connectorId}] Suspending charging due to EV request`);
       await onStatusChange(connectorId, 'SuspendedEV');
     } catch (error) {
+      console.error(`❌ [ConnectorCard-${connectorId}] Error suspending (EV):`, error);
       alert(`Lỗi khi tạm dừng sạc (EV): ${error.message}`);
     }
   };
 
   const handleSuspendEVSE = async () => {
-    if (!canSuspend()) {
-      return;
-    }
+    if (!canSuspend()) return;
 
     try {
-      console.log(`🔍 [DEBUG] handleSuspendEVSE called for connector ${connectorId}, onStatusChange:`, typeof onStatusChange);
-      console.log(`⚡ Suspending charging due to EVSE limit for connector ${connectorId}`);
+      console.log(`⚡ [ConnectorCard-${connectorId}] Suspending charging due to EVSE limit`);
       await onStatusChange(connectorId, 'SuspendedEVSE');
     } catch (error) {
+      console.error(`❌ [ConnectorCard-${connectorId}] Error suspending (EVSE):`, error);
       alert(`Lỗi khi tạm dừng sạc (EVSE): ${error.message}`);
     }
   };
 
   const handleResumeCharging = async () => {
-    if (!canResume()) {
-      return;
-    }
+    if (!canResume()) return;
 
     try {
-      console.log(`🔄 Resuming charging for connector ${connectorId}`);
+      console.log(`🔄 [ConnectorCard-${connectorId}] Resuming charging`);
       await onStatusChange(connectorId, 'Charging');
     } catch (error) {
+      console.error(`❌ [ConnectorCard-${connectorId}] Error resuming:`, error);
       alert(`Lỗi khi tiếp tục sạc: ${error.message}`);
     }
   };
 
   const handleCableDisconnect = async () => {
-    if (!canDisconnectCable()) {
-      return;
-    }
+    if (!canDisconnectCable()) return;
 
     try {
-      console.log(`🔌 Cable disconnected for connector ${connectorId}, finishing transaction`);
-      // Chuyển sang Finishing trước khi về Available
+      console.log(`🔌 [ConnectorCard-${connectorId}] Cable disconnected, finishing transaction`);
+      
       await onStatusChange(connectorId, 'Finishing');
       
-      // Delay ngắn để mô phỏng quá trình finishing
+      // Delay to simulate finishing process
       setTimeout(async () => {
         try {
-          // Dừng transaction và chuyển về Available
           await onLocalStop(connectorId);
-          console.log(`✅ Transaction finished for connector ${connectorId}`);
+          console.log(`✅ [ConnectorCard-${connectorId}] Transaction finished successfully`);
         } catch (error) {
-          console.error(`❌ Error finishing transaction:`, error);
+          console.error(`❌ [ConnectorCard-${connectorId}] Error finishing transaction:`, error);
         }
       }, 2000);
     } catch (error) {
+      console.error(`❌ [ConnectorCard-${connectorId}] Error disconnecting cable:`, error);
       alert(`Lỗi khi rút cáp: ${error.message}`);
     }
   };
 
   const handlePowerChange = (newPower) => {
-    setPowerKw(newPower);
-    if (meterTimer && meterTimer.isActive()) {
-      meterTimer.setPower(newPower);
+    const validPower = Math.max(3.5, Math.min(15, newPower));
+    setPowerKw(validPower);
+    
+    if (meterService && typeof meterService.setPower === 'function' && meterService.isActive()) {
+      try {
+        meterService.setPower(validPower);
+        console.log(`⚡ [ConnectorCard-${connectorId}] Power updated to ${validPower}kW`);
+      } catch (error) {
+        console.warn(`⚠️ [ConnectorCard-${connectorId}] Error setting power:`, error);
+      }
     }
   };
 
   const handleStatusAction = async (newStatus) => {
+    if (!isConnected || disabled) return;
+
     try {
-      // Nếu chuyển sang Available từ trạng thái khác, reset safety check
+      // Reset safety check when returning to Available
       if (newStatus === 'Available') {
-        setPreCheck({
+        setSafetyCheck({
           parked: false,
           plugged: false,
           confirmationCode: '',
@@ -239,9 +251,33 @@ const ConnectorCard = ({
         });
       }
       
+      console.log(`🔧 [ConnectorCard-${connectorId}] Changing status to ${newStatus}`);
       await onStatusChange(connectorId, newStatus);
     } catch (error) {
+      console.error(`❌ [ConnectorCard-${connectorId}] Error changing status:`, error);
       alert(`Lỗi khi thay đổi trạng thái: ${error.message}`);
+    }
+  };
+
+  const updatePrice = async () => {
+    if (!meterService || !isConnected || disabled) return;
+
+    try {
+      console.log(`💲 [ConnectorCard-${connectorId}] Updating price from API...`);
+      const apiUrl = 'http://localhost:3000/api/settings/price-per-kwh';
+      const newPrice = await meterService.updatePriceFromApi(apiUrl);
+      
+      if (newPrice) {
+        const newStats = meterService.getChargingStats();
+        if (newStats) {
+          setStats(prevStats => ({ ...prevStats, ...newStats }));
+        }
+        console.log(`✅ [ConnectorCard-${connectorId}] Price updated to ${newPrice} VND/kWh`);
+      } else {
+        console.warn(`⚠️ [ConnectorCard-${connectorId}] Failed to update price from API`);
+      }
+    } catch (error) {
+      console.error(`❌ [ConnectorCard-${connectorId}] Error updating price:`, error);
     }
   };
 
@@ -255,7 +291,8 @@ const ConnectorCard = ({
       'Finishing': { color: 'orange', emoji: '🟠', text: 'Kết thúc' },
       'Unavailable': { color: 'gray', emoji: '⚫', text: 'Không khả dụng' },
       'Faulted': { color: 'red', emoji: '🔴', text: 'Lỗi' },
-      'FullyCharged': { color: 'teal', emoji: '✅', text: 'Sạc đầy' } // Thêm trạng thái sạc đầy
+      'FullyCharged': { color: 'teal', emoji: '✅', text: 'Sạc đầy' },
+      'Chưa kết nối': { color: 'gray', emoji: '⚪', text: 'Chưa kết nối' }
     };
 
     const config = statusConfig[status] || statusConfig['Available'];
@@ -267,13 +304,44 @@ const ConnectorCard = ({
   };
 
   return (
-    <div className="connector-card">
+    <div className={`connector-card ${disabled ? 'disabled' : ''}`}>
       <div className="connector-header">
         <h3>🔌 Connector {connectorId}</h3>
         {getStatusBadge()}
       </div>
 
-      {/* Thêm thông báo nổi bật khi sạc đầy */}
+      {/* Safety Check Section - Only when Available and connected */}
+      {status === 'Available' && isConnected && !disabled && (
+        <div className="safety-check-section">
+          <h4>🔒 Kiểm tra an toàn trước khi sạc</h4>
+          <button 
+            onClick={() => setSafetyCheck(s => ({ ...s, parked: !s.parked }))}
+            className={safetyCheck.parked ? 'checked' : ''}
+          >
+            {safetyCheck.parked ? '✅' : '⬜'} Xe đã đỗ đúng vị trí
+          </button>
+          <button 
+            onClick={() => setSafetyCheck(s => ({ ...s, plugged: !s.plugged }))}
+            className={safetyCheck.plugged ? 'checked' : ''}
+          >
+            {safetyCheck.plugged ? '✅' : '⬜'} Cáp sạc đã được cắm
+          </button>
+          <button 
+            onClick={() => setSafetyCheck(s => ({ ...s, confirmed: !s.confirmed }))}
+            className={safetyCheck.confirmed ? 'checked' : ''}
+          >
+            {safetyCheck.confirmed ? '✅' : '⬜'} Người dùng xác nhận sẵn sàng
+          </button>
+          <div className="safety-status">
+            {safetyCheck.parked && safetyCheck.plugged && safetyCheck.confirmed
+              ? <span style={{color: 'green'}}>✅ Đã hoàn thành kiểm tra an toàn!</span>
+              : <span style={{color: 'orange'}}>⚠️ Vui lòng hoàn thành tất cả kiểm tra an toàn</span>
+            }
+          </div>
+        </div>
+      )}
+
+      {/* Full charge notice */}
       {status === 'FullyCharged' && (
         <div className="full-charged-notice">
           <span role="img" aria-label="full">🔋</span>
@@ -281,209 +349,215 @@ const ConnectorCard = ({
         </div>
       )}
 
-      {/* Simple ID Tag Input */}
-      <div className="id-tag-section">
-        <h4>🏷️ Nhập ID Tag (User ID)</h4>
-        <div className="id-tag-input">
-          <input
-            type="text"
-            placeholder="Nhập User ID (6 số)"
-            value={preCheck.confirmationCode}
-            onChange={(e) => handlePreCheckChange('confirmationCode', e.target.value.replace(/\D/g, '').slice(0, 6))}
-            disabled={status !== 'Available'}
-            maxLength={6}
-          />
+      {/* ID Tag Input Section */}
+      {isConnected && !disabled && (
+        <div className="id-tag-section">
+          <h4>🏷️ Nhập ID Tag (User ID)</h4>
+          <div className="id-tag-input">
+            <input
+              type="text"
+              placeholder="Nhập User ID (6 số)"
+              value={safetyCheck.confirmationCode}
+              onChange={e =>
+                setSafetyCheck(s => ({
+                  ...s,
+                  confirmationCode: e.target.value.replace(/\D/g, '').slice(0, 6)
+                }))
+              }
+              disabled={status !== 'Preparing'}
+              maxLength={6}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Control Section */}
-      <div className="control-section">
-        <div className="power-control">
-          <label>⚡ Công suất (kW):</label>
-          <input
-            type="number"
-            value={powerKw}
-            onChange={(e) => handlePowerChange(parseFloat(e.target.value) || 0)}
-            min="3.5"
-            max="15"
-            step="0.5"
-            disabled={!isConnected}
-          />
-          <button
-            className="btn btn-small"
-            onClick={() => handlePowerChange(3.5)}
-            disabled={!isConnected}
-            style={{ marginLeft: 8 }}
-          >
-            Sạc chậm
-          </button>
-          <button
-            className="btn btn-small"
-            onClick={() => handlePowerChange(11)}
-            disabled={!isConnected}
-            style={{ marginLeft: 4 }}
-          >
-            Sạc nhanh
-          </button>
-        </div>
-        <div className="info-item">
-          <label>Giá điện:</label>
-          <span>
-            {(stats.pricePerKwh !== undefined && stats.pricePerKwh !== null)
-              ? stats.pricePerKwh.toLocaleString('vi-VN', { maximumFractionDigits: 1 })
-              : 'N/A'} ₫/kWh
-          </span>
-          <button
-            className="btn btn-small"
-            onClick={async () => {
-              if (meterTimer) {
-                try {
-                  const apiUrl = 'http://localhost:3000/api/settings/price-per-kwh';
-                  await meterTimer.updatePricePerKwhFromApi(apiUrl);
-                  setStats(meterTimer.getChargingStats());
-                } catch (error) {
-                  console.error('Lỗi khi cập nhật giá điện:', error);
-                }
-              }
-            }}
-            disabled={!isConnected}
-            style={{ marginLeft: 8 }}
-          >
-            🔄 Cập nhật giá
-          </button>
-        </div>
-        <div className="action-buttons">
-          <button
-            className="btn btn-success"
-            onClick={handleLocalStart}
-            disabled={status !== 'Available' || !preCheck.confirmationCode || preCheck.confirmationCode.length !== 6}
-          >
-            🚀 Bắt đầu sạc
-          </button>
+      {isConnected && !disabled && (
+        <div className="control-section">
+          <div className="power-control">
+            <label>⚡ Công suất (kW):</label>
+            <input
+              type="number"
+              value={powerKw}
+              onChange={(e) => handlePowerChange(parseFloat(e.target.value) || 3.5)}
+              min="3.5"
+              max="15"
+              step="0.5"
+              disabled={status === 'Charging'}
+            />
+            <button
+              className="btn btn-small"
+              onClick={() => handlePowerChange(3.5)}
+              disabled={status === 'Charging'}
+              style={{ marginLeft: 8 }}
+            >
+              Sạc chậm
+            </button>
+            <button
+              className="btn btn-small"
+              onClick={() => handlePowerChange(11)}
+              disabled={status === 'Charging'}
+              style={{ marginLeft: 4 }}
+            >
+              Sạc nhanh
+            </button>
+          </div>
+          
+          <div className="info-item">
+            <label>Giá điện:</label>
+            <span>
+              {(stats.pricePerKwh !== undefined && stats.pricePerKwh !== null)
+                ? stats.pricePerKwh.toLocaleString('vi-VN', { maximumFractionDigits: 1 })
+                : 'N/A'} ₫/kWh
+            </span>
+            <button
+              className="btn btn-small"
+              onClick={updatePrice}
+              disabled={!meterService}
+              style={{ marginLeft: 8 }}
+            >
+              🔄 Cập nhật giá
+            </button>
+          </div>
 
-          <button
-            className="btn btn-danger"
-            onClick={handleLocalStop}
-            disabled={!canStop()}
-          >
-            ⏹️ Dừng sạc (Local)
-          </button>
+          <div className="action-buttons">
+            <button
+              className={`btn ${canStartCharging() ? 'btn-success' : 'btn-disabled'}`}
+              onClick={handleLocalStart}
+              disabled={!canStartCharging()}
+            >
+              🚀 Bắt đầu sạc
+            </button>
 
-          {/* Suspend/Resume Controls */}
-          {status === 'Charging' && (
-            <>
+            <button
+              className="btn btn-danger"
+              onClick={handleLocalStop}
+              disabled={!canStop()}
+            >
+              ⏹️ Dừng sạc (Local)
+            </button>
+
+            {/* Suspend/Resume Controls */}
+            {status === 'Charging' && (
+              <>
+                <button
+                  className="btn btn-warning"
+                  onClick={handleSuspendEV}
+                  disabled={!canSuspend()}
+                  style={{ marginTop: 8 }}
+                >
+                  🚗 Xe tạm dừng
+                </button>
+
+                <button
+                  className="btn btn-warning"
+                  onClick={handleSuspendEVSE}
+                  disabled={!canSuspend()}
+                  style={{ marginLeft: 8, marginTop: 8 }}
+                >
+                  ⚡ Trạm tạm dừng
+                </button>
+              </>
+            )}
+
+            {(status === 'SuspendedEV' || status === 'SuspendedEVSE') && (
               <button
-                className="btn btn-warning"
-                onClick={handleSuspendEV}
-                disabled={!canSuspend()}
+                className="btn btn-info"
+                onClick={handleResumeCharging}
+                disabled={!canResume()}
                 style={{ marginTop: 8 }}
               >
-                🚗 Xe tạm dừng
+                🔄 Tiếp tục sạc
               </button>
+            )}
 
+            {/* Cable Disconnect */}
+            {canDisconnectCable() && (
               <button
-                className="btn btn-warning"
-                onClick={handleSuspendEVSE}
-                disabled={!canSuspend()}
-                style={{ marginLeft: 8, marginTop: 8 }}
+                className="btn btn-secondary"
+                onClick={handleCableDisconnect}
+                style={{ marginTop: 8, backgroundColor: '#6c757d' }}
               >
-                ⚡ Trạm tạm dừng
+                🔌 Rút cáp sạc
               </button>
-            </>
-          )}
-
-          {(status === 'SuspendedEV' || status === 'SuspendedEVSE') && (
-            <button
-              className="btn btn-info"
-              onClick={handleResumeCharging}
-              disabled={!canResume()}
-              style={{ marginTop: 8 }}
-            >
-              🔄 Tiếp tục sạc
-            </button>
-          )}
-
-          {/* Cable Disconnect */}
-          {(status === 'Charging' || status === 'SuspendedEV' || status === 'SuspendedEVSE') && (
-            <button
-              className="btn btn-secondary"
-              onClick={handleCableDisconnect}
-              disabled={!canDisconnectCable()}
-              style={{ marginTop: 8, backgroundColor: '#6c757d' }}
-            >
-              🔌 Rút cáp sạc
-            </button>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Charging Info - Luôn hiển thị nếu có transactionId */}
+      {/* Charging Info - Show when there's an active transaction */}
       {transactionId && (
         <div className="charging-info">
           <h4>📊 Quá trình sạc</h4>
-          {/* Progress bar với số kWh đã sạc và phần trăm */}
+          
+          {/* Progress bar */}
           <div className="charging-progress-bar">
             <div
               className="charging-progress"
               style={{
-                width: `${Math.min(stats.energyKwh / (stats.fullChargeThresholdKwh || 2) * 100, 100)}%`,
+                width: `${Math.min((stats.energyKwh || 0) / (stats.fullChargeThresholdKwh || 2) * 100, 100)}%`,
                 background: status === 'FullyCharged' ? '#38b2ac' : '#2563eb'
               }}
             ></div>
           </div>
+          
           <div className="charging-progress-label">
-            Đã sạc: <b>{stats.energyKwh.toFixed(2)} kWh</b> / <b>{stats.fullChargeThresholdKwh || 2} kWh</b>
-            ({Math.min(stats.energyKwh / (stats.fullChargeThresholdKwh || 2) * 100, 100).toFixed(1)}%)
+            Đã sạc: <b>{(stats.energyKwh || 0).toFixed(2)} kWh</b> / <b>{stats.fullChargeThresholdKwh || 2} kWh</b>
+            ({Math.min((stats.energyKwh || 0) / (stats.fullChargeThresholdKwh || 2) * 100, 100).toFixed(1)}%)
           </div>
+          
           <div className="charging-time-label">
-            Thời gian sạc: <b>{stats.duration}</b>
+            Thời gian sạc: <b>{stats.duration || '00:00:00'}</b>
           </div>
+          
           <div className="charging-details-grid">
             <div>
               <span className="charging-detail-label">Công suất hiện tại:</span>
-              <span className="charging-detail-value">{stats.powerKw} kW</span>
+              <span className="charging-detail-value">{(stats.powerKw || 0).toFixed(1)} kW</span>
             </div>
             <div>
               <span className="charging-detail-label">Giá ước tính:</span>
-              <span className="charging-detail-value">{stats.estimatedCost} ₫</span>
+              <span className="charging-detail-value">{(stats.estimatedCost || 0).toLocaleString('vi-VN')} ₫</span>
             </div>
             <div>
               <span className="charging-detail-label">User đang sạc:</span>
-              <span className="charging-detail-value">{stats.idTag || preCheck.confirmationCode || 'N/A'}</span>
+              <span className="charging-detail-value">{stats.idTag || safetyCheck.confirmationCode || 'N/A'}</span>
             </div>
           </div>
         </div>
       )}
 
       {/* Status Actions */}
-      <div className="status-actions">
-        <h4>🔧 Điều khiển trạng thái</h4>
-        <div className="status-buttons">
-          <button
-            className="btn btn-warning btn-small"
-            onClick={() => handleStatusAction('Faulted')}
-            disabled={!isConnected || status === 'Faulted'}
-          >
-            ⚠️ Báo lỗi
-          </button>
+      {isConnected && !disabled && (
+        <div className="status-actions">
+          <h4>🔧 Điều khiển trạng thái</h4>
+          <div className="status-buttons">
+            <button
+              className="btn btn-warning btn-small"
+              onClick={() => handleStatusAction('Faulted')}
+              disabled={status === 'Faulted' || status === 'Charging'}
+            >
+              ⚠️ Báo lỗi
+            </button>
 
-          <button
-            className="btn btn-secondary btn-small"
-            onClick={() => handleStatusAction('Available')}
-            disabled={!isConnected || status === 'Available' || status === 'Charging'}
-          >
-            ✅ Khôi phục
-          </button>
+            <button
+              className="btn btn-secondary btn-small"
+              onClick={() => handleStatusAction('Available')}
+              disabled={status === 'Available' || status === 'Charging'}
+            >
+              ✅ Khôi phục
+            </button>
 
-          <button
-            className="btn btn-gray btn-small"
-            onClick={() => handleStatusAction('Unavailable')}
-            disabled={!isConnected || status === 'Unavailable' || status === 'Charging'}
-          >
-            🚫 Không khả dụng
-          </button>
+            <button
+              className="btn btn-gray btn-small"
+              onClick={() => handleStatusAction('Unavailable')}
+              disabled={status === 'Unavailable' || status === 'Charging'}
+            >
+              🚫 Không khả dụng
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
