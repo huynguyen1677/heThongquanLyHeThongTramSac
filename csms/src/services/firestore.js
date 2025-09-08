@@ -124,8 +124,8 @@ class FirestoreService {
         ...updateData,
         lastUpdated: getTimestamp()
       };
-      
-      await transactionRef.update(data);
+      // Sửa ở đây: dùng set với merge true
+      await transactionRef.set(data, { merge: true });
       logger.debug(`Transaction updated in Firestore: ${transactionId}`);
       return true;
     } catch (error) {
@@ -438,12 +438,13 @@ class FirestoreService {
         ...updateData,
         lastUpdated: getTimestamp()
       };
-      
-      await sessionRef.update(data);
+      // Dùng set với merge: true thay vì update để tránh lỗi document không tồn tại
+      await sessionRef.set(data, { merge: true });
       logger.debug(`Charging session updated in Firestore: ${sessionId}`);
       return data;
     } catch (error) {
-      logger.error(`Error updating charging session ${sessionId} in Firestore:`, error);
+      logger.error(`Error updating charging session ${sessionId} in Firestore:`, error.message);
+      logger.error(`Full error:`, error);
       throw error;
     }
   }

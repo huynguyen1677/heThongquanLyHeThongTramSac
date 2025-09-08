@@ -19,8 +19,26 @@ export class TransactionService {
     };
     const startResponse = await this.sendCall('StartTransaction', startPayload);
 
-    if (!startResponse.transactionId) {
-      throw new Error('No transaction ID received from server');
+    // Kiểm tra trạng thái response từ server
+    if (startResponse.idTagInfo && startResponse.idTagInfo.status !== 'Accepted') {
+      const status = startResponse.idTagInfo.status;
+      const info = startResponse.idTagInfo.info || '';
+      
+      if (status === 'Blocked') {
+        if (info.includes('Insufficient balance')) {
+          throw new Error(`Số dư không đủ để bắt đầu sạc. ${info}`);
+        } else {
+          throw new Error(`Thẻ bị chặn: ${info || 'Không được phép sạc'}`);
+        }
+      } else if (status === 'Invalid') {
+        throw new Error(`Thẻ không hợp lệ: ${info || 'ID Tag không được nhận dạng'}`);
+      } else {
+        throw new Error(`Không thể bắt đầu sạc. Trạng thái: ${status}. ${info}`);
+      }
+    }
+
+    if (!startResponse.transactionId || startResponse.transactionId === 0) {
+      throw new Error('Không nhận được ID giao dịch từ server');
     }
 
     // 3. Send initial status

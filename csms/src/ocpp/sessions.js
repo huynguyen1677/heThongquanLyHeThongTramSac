@@ -611,6 +611,55 @@ class SessionManager {
       timestamp: getTimestamp()
     };
   }
+
+  // Phương thức hỗ trợ kiểm tra số dư trong quá trình sạc
+  getCurrentMeterValues(stationId, connectorId) {
+    const connector = this.getConnector(stationId, connectorId);
+    if (!connector || !connector.meterValues.length) {
+      return null;
+    }
+
+    // Lấy giá trị meterValue mới nhất
+    const latestMeterValue = connector.meterValues[connector.meterValues.length - 1];
+    
+    // Tìm giá trị Energy.Active.Import.Register từ meter values
+    if (latestMeterValue && latestMeterValue.sampledValue) {
+      for (const sample of latestMeterValue.sampledValue) {
+        if (sample.measurand === 'Energy.Active.Import.Register') {
+          return parseFloat(sample.value) || 0;
+        }
+      }
+    }
+    
+    return 0;
+  }
+
+  // Cập nhật trạng thái transaction
+  setTransactionStatus(stationId, transactionId, status) {
+    const transaction = this.transactions.get(transactionId);
+    if (transaction) {
+      transaction.status = status;
+      logger.info(`Transaction ${transactionId} status updated to: ${status}`);
+      
+      // Cập nhật vào Firebase nếu cần
+      try {
+        realtimeService.updateTransactionStatus(stationId, transactionId, status);
+      } catch (error) {
+        logger.error(`Error updating transaction status in Firebase:`, error);
+      }
+    }
+  }
+
+  // Lấy thông tin transaction với stationId (để tương thích với code mới)
+  getTransaction(stationId, transactionId) {
+    if (typeof stationId === 'number' || (typeof stationId === 'string' && !transactionId)) {
+      // Nếu chỉ có 1 tham số hoặc tham số đầu là số, đó là transactionId
+      return this.transactions.get(Number(stationId));
+    }
+    
+    // Nếu có cả stationId và transactionId
+    return this.transactions.get(Number(transactionId));
+  }
 }
 
 export const sessions = new SessionManager();

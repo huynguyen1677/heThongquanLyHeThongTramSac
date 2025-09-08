@@ -143,7 +143,7 @@ class RealtimeService {
       // Cập nhật connector - GIỮ NGUYÊN Wh_total và kwh tích lũy
       const connectorRef = this.db.ref(`live/stations/${stationId}/connectors/${connectorId}`);
       const updateData = {
-        userId: idTag || null, // <-- Lưu userId (idTag) thay vì txId
+        userId: idTag || null, // <-- Lưu userId (idTag)
         txId: transactionId,
         W_now: 0,
         session_kwh: 0,        // kWh của phiên hiện tại (để tracking riêng)
@@ -161,7 +161,7 @@ class RealtimeService {
 
       await connectorRef.update(updateData);
 
-      logger.info(`Transaction started: ${stationId}/${connectorId} -> ${transactionId}, startWh: ${initialWhValue}, userId: ${userId || 'N/A'}`);
+      logger.info(`Transaction started: ${stationId}/${connectorId} -> ${transactionId}, startWh: ${initialWhValue}, userId: ${idTag || 'N/A'}`);
       return true;
     } catch (error) {
       logger.error('Error starting transaction:', error);
@@ -169,12 +169,60 @@ class RealtimeService {
     }
   }
 
-  // Kết thúc transaction - cleanup
-  async stopTransaction(stationId, connectorId, transactionId) {
+  // Kết thúc transaction - cleanup và xử lý thanh toán
+  async stopTransaction(stationId, connectorId, transactionId, shouldProcessPayment = true) {
     if (!this.isAvailable()) return false;
 
     try {
       const transactionKey = `${stationId}-${connectorId}-${transactionId}`;
+      
+      // Lấy dữ liệu connector cuối cùng trước khi cleanup
+      const connectorSnapshot = await this.db.ref(`live/stations/${stationId}/connectors/${connectorId}`).once('value');
+      const connectorData = connectorSnapshot.val();
+      
+      // Delay payment processing để đảm bảo charging session đã được lưu vào Firestore
+      if (shouldProcessPayment && connectorData && connectorData.userId) {
+        logger.info(`🏦 Processing payment for transaction: ${transactionId}, userId: ${connectorData.userId}`);
+        
+        // Sử dụng setTimeout để chạy payment sau khi tất cả cập nhật khác hoàn thành
+        setTimeout(async () => {
+          try {
+            const { handleStopTransaction } = await import('../payments/paymentService.js');
+            const paymentResult = await handleStopTransaction(transactionId);
+            
+            if (paymentResult && paymentResult.success) {
+              logger.info(`✅ Payment completed for transaction ${transactionId}`);
+              
+              // Gửi notification thành công
+              await this.sendNotification('payment_success',
+                `Payment processed successfully. Amount: ${paymentResult.costCalculation?.totalCost || 'N/A'} VND`,
+                null,
+                connectorData.userId
+              );
+            } else {
+              logger.error(`❌ Payment failed for transaction ${transactionId}:`, paymentResult?.error || 'Unknown error');
+              
+              // Gửi notification thất bại
+              await this.sendNotification('payment_failed',
+                `Payment failed: ${paymentResult?.error || 'Unknown error'}`,
+                null,
+                connectorData.userId
+              );
+            }
+          } catch (paymentError) {
+            logger.error(`💥 Payment processing error for transaction ${transactionId}:`, paymentError);
+            
+            // Gửi notification lỗi hệ thống
+            await this.sendNotification('payment_error',
+              'Payment system error. Please contact support.',
+              null,
+              connectorData.userId
+            );
+          }
+        }, 500); // Delay 500ms để đảm bảo session đã được lưu
+      } else {
+        logger.info(`⏭️ Skipping payment processing for transaction ${transactionId} (shouldProcessPayment: ${shouldProcessPayment}, userId: ${connectorData?.userId})`);
+      }
       
       // Xóa từ cache
       this.transactionStartValues.delete(transactionKey);
@@ -183,6 +231,7 @@ class RealtimeService {
       const connectorRef = this.db.ref(`live/stations/${stationId}/connectors/${connectorId}`);
       await connectorRef.update({
         txId: null, // number|null - clear transaction ID
+        userId: null, // clear user ID
         W_now: 0, // công suất hiện tại (W) - reset về 0
         session_kwh: 0, // Reset session kWh
         session_cost: 0, // Reset session cost
@@ -788,6 +837,143 @@ class RealtimeService {
     } catch (error) {
       logger.error('Error updating connector threshold:', error);
       return false;
+    }
+  }
+
+  // XỬ LÝ THANH TOÁN KHI KẾT THÚC PHIÊN SẠC
+  async processSessionPayment(paymentData) {
+    try {
+      logger.info('🏦 Starting session payment processing...', { 
+        userId: paymentData.userId,
+        transactionId: paymentData.transactionId,
+        sessionCost: paymentData.sessionCost 
+      });
+
+      // Import PaymentProcessor để tránh circular dependency
+      const { PaymentProcessor } = await import('../payments/paymentProcessor.js');
+      
+      const result = await PaymentProcessor.processSessionPayment(paymentData);
+      
+      if (result.success) {
+        logger.info('✅ Session payment completed successfully', {
+          userId: paymentData.userId,
+          transactionId: paymentData.transactionId,
+          amount: result.costCalculation.totalCost,
+          newBalance: result.payment.newBalance
+        });
+
+        // Gửi notification cho user về thanh toán thành công
+        await this.sendNotification('payment_success', 
+          `Payment processed successfully. Amount: ${result.costCalculation.totalCost} VND. New balance: ${result.payment.newBalance} VND`,
+          null,
+          paymentData.userId
+        );
+
+        // Cập nhật trạng thái thanh toán vào realtime DB
+        await this.updatePaymentStatus(paymentData.transactionId, 'paid', result);
+
+      } else {
+        logger.error('❌ Session payment failed', {
+          userId: paymentData.userId,
+          transactionId: paymentData.transactionId,
+          error: result.error
+        });
+
+        // Gửi notification cho user về lỗi thanh toán
+        await this.sendNotification('payment_failed',
+          `Payment failed: ${result.error}`,
+          null,
+          paymentData.userId
+        );
+
+        // Cập nhật trạng thái thanh toán vào realtime DB
+        await this.updatePaymentStatus(paymentData.transactionId, 'failed', result);
+      }
+
+      return result;
+
+    } catch (error) {
+      logger.error('💥 Error in session payment processing:', error);
+      
+      // Gửi notification cho user về lỗi hệ thống
+      await this.sendNotification('payment_error',
+        `Payment system error. Please contact support.`,
+        null,
+        paymentData.userId
+      );
+
+      return {
+        success: false,
+        error: error.message,
+        errorCode: 'PAYMENT_SYSTEM_ERROR'
+      };
+    }
+  }
+
+  // Cập nhật trạng thái thanh toán vào realtime DB
+  async updatePaymentStatus(transactionId, status, paymentResult) {
+    if (!this.isAvailable()) return false;
+
+    try {
+      const paymentRef = this.db.ref(`payments/${transactionId}`);
+      const data = {
+        status, // 'paid', 'failed', 'pending'
+        timestamp: getTimestamp(),
+        ...paymentResult
+      };
+
+      await paymentRef.set(data);
+      logger.debug(`Payment status updated: ${transactionId} -> ${status}`);
+      return true;
+
+    } catch (error) {
+      logger.error('Error updating payment status:', error);
+      return false;
+    }
+  }
+
+  // Kiểm tra số dư user trước khi bắt đầu sạc
+  async checkUserBalanceForCharging(userId, estimatedCost = 0) {
+    try {
+      // Import BalanceUpdater để kiểm tra số dư
+      const { BalanceUpdater } = await import('../payments/balanceUpdater.js');
+      
+      const balanceCheck = await BalanceUpdater.checkSufficientBalance(userId, estimatedCost);
+      
+      if (balanceCheck.sufficient) {
+        logger.info(`✅ User ${userId} has sufficient balance: ${balanceCheck.currentBalance} >= ${estimatedCost}`);
+      } else {
+        logger.warn(`⚠️ User ${userId} has insufficient balance: ${balanceCheck.currentBalance} < ${estimatedCost}`);
+      }
+
+      return balanceCheck;
+
+    } catch (error) {
+      logger.error('Error checking user balance:', error);
+      return {
+        userId,
+        currentBalance: 0,
+        requiredAmount: estimatedCost,
+        sufficient: false,
+        error: error.message
+      };
+    }
+  }
+
+  // Lấy lịch sử thanh toán realtime
+  async getPaymentHistory(userId, limit = 20) {
+    try {
+      // Import BalanceUpdater để lấy lịch sử
+      const { BalanceUpdater } = await import('../payments/balanceUpdater.js');
+      
+      const history = await BalanceUpdater.getPaymentHistory(userId, limit);
+      logger.debug(`Retrieved ${history.length} payment records for user ${userId}`);
+      
+      return history;
+
+    } catch (error) {
+      logger.error('Error getting payment history:', error);
+      return [];
     }
   }
 }

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import ErrorModal from './ErrorModal';
 import './ConnectorCard.css';
 
 const INITIAL_STATS = {
@@ -28,6 +29,14 @@ const ConnectorCard = ({
 }) => {
   const [powerKw, setPowerKw] = useState(11);
   const [stats, setStats] = useState(INITIAL_STATS);
+
+  // Error modal state
+  const [errorModal, setErrorModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'error'
+  });
 
   // Safety check state
   const [safetyCheck, setSafetyCheck] = useState({
@@ -142,7 +151,12 @@ const ConnectorCard = ({
     }
 
     if (!safetyCheck.confirmationCode || safetyCheck.confirmationCode.length !== 6) {
-      alert('Vui lòng nhập User ID (6 số) trước khi bắt đầu sạc!');
+      setErrorModal({
+        isOpen: true,
+        title: 'Thông tin thiếu',
+        message: 'Vui lòng nhập User ID (6 số) trước khi bắt đầu sạc!',
+        type: 'warning'
+      });
       return;
     }
 
@@ -154,7 +168,43 @@ const ConnectorCard = ({
       console.log(`✅ [ConnectorCard-${connectorId}] Charging request sent successfully`);
     } catch (error) {
       console.error(`❌ [ConnectorCard-${connectorId}] Error starting charge:`, error);
-      alert(`Lỗi khi bắt đầu sạc: ${error.message}`);
+      
+      // Hiển thị modal lỗi chi tiết
+      const errorMessage = error.message || 'Lỗi không xác định';
+      
+      if (errorMessage.includes('Số dư không đủ')) {
+        // Modal đặc biệt cho lỗi số dư
+        setErrorModal({
+          isOpen: true,
+          title: 'Số dư không đủ',
+          message: errorMessage,
+          type: 'insufficient-balance'
+        });
+      } else if (errorMessage.includes('Thẻ bị chặn')) {
+        // Modal cho lỗi thẻ bị chặn
+        setErrorModal({
+          isOpen: true,
+          title: 'Thẻ bị chặn',
+          message: `${errorMessage}\n\nVui lòng liên hệ hỗ trợ để kiểm tra tài khoản.`,
+          type: 'blocked'
+        });
+      } else if (errorMessage.includes('Thẻ không hợp lệ')) {
+        // Modal cho lỗi thẻ không hợp lệ
+        setErrorModal({
+          isOpen: true,
+          title: 'Thẻ không hợp lệ',
+          message: `${errorMessage}\n\nVui lòng kiểm tra lại User ID.`,
+          type: 'invalid'
+        });
+      } else {
+        // Modal chung cho các lỗi khác
+        setErrorModal({
+          isOpen: true,
+          title: 'Lỗi khi bắt đầu sạc',
+          message: `${errorMessage}\n\nVui lòng thử lại hoặc liên hệ hỗ trợ.`,
+          type: 'error'
+        });
+      }
     }
   };
 
@@ -573,6 +623,24 @@ const ConnectorCard = ({
           </div>
         </div>
       )}
+      
+      {/* Error Modal */}
+      <ErrorModal
+        isOpen={errorModal.isOpen}
+        onClose={() => setErrorModal(prev => ({ ...prev, isOpen: false }))}
+        title={errorModal.title}
+        message={errorModal.message}
+        type={errorModal.type}
+        onTopUp={() => {
+          // Hiển thị hướng dẫn nạp tiền
+          alert('🏦 Vui lòng liên hệ quản trị viên để nạp thêm tiền vào tài khoản.\n\n📞 Hotline: 1900-XXXX\n📧 Email: support@example.com');
+          setErrorModal(prev => ({ ...prev, isOpen: false }));
+        }}
+        onRetry={() => {
+          setErrorModal(prev => ({ ...prev, isOpen: false }));
+          // Có thể thêm logic retry ở đây
+        }}
+      />
     </div>
   );
 };
