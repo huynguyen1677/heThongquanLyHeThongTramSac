@@ -5,23 +5,23 @@ export function useChargingSession(stationConfig, updateConnector, sendStatusNot
     const { sessionStats, meterStop, connector } = sessionData;
     
     const sessionEndTime = new Date();
-    const sessionDuration = sessionStats.duration || 0;
-    const sessionStartTime = new Date(sessionEndTime.getTime() - sessionDuration * 1000);
+    const duration = sessionStats?.duration || '00:00:00';
+    const sessionStartTime = new Date(sessionEndTime.getTime() - duration * 1000);
 
     const sessionSummaryData = {
       id: `session_${Date.now()}_${connectorId}`,
-      transactionId: connector.transactionId,
+      transactionId: connector?.transactionId || null,
       connectorId: connectorId,
       userId: 'DEMO_USER',
       stationId: stationConfig?.id || 'UNKNOWN',
       startTime: sessionStartTime.getTime(),
       endTime: sessionEndTime.getTime(),
-      duration: sessionDuration,
-      meterStart: connector.meterStart || 0,
+      duration: duration,
+      meterStart: connector?.meterStart || 0,
       meterStop: meterStop,
-      energyConsumed: meterStop - (connector.meterStart || 0),
-      pricePerKwh: sessionStats.pricePerKwh || 0,
-      estimatedCost: sessionStats.estimatedCost || 0,
+      energyConsumed: meterStop - (connector?.meterStart || 0),
+      pricePerKwh: sessionStats?.pricePerKwh || 0,
+      estimatedCost: sessionStats?.estimatedCost || 0,
       status: 'completed',
       reason: 'Local stop requested'
     };

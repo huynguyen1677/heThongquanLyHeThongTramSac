@@ -28,6 +28,8 @@ const ConnectorCard = ({
 }) => {
   const [powerKw, setPowerKw] = useState(11);
   const [stats, setStats] = useState(INITIAL_STATS);
+
+  // Safety check state
   const [safetyCheck, setSafetyCheck] = useState({
     parked: false,
     plugged: false,
@@ -44,7 +46,7 @@ const ConnectorCard = ({
       try {
         const newStats = meterService.getChargingStats();
         if (newStats && typeof newStats === 'object') {
-          setStats(prevStats => ({ ...prevStats, ...newStats }));
+          setStats(prevStats => ({ ...INITIAL_STATS, ...prevStats, ...newStats }));
         }
       } catch (error) {
         console.warn(`⚠️ [ConnectorCard-${connectorId}] Error getting initial charging stats:`, error);
@@ -56,7 +58,9 @@ const ConnectorCard = ({
     if (status === 'Charging' && meterService?.isActive()) {
       interval = setInterval(() => {
         try {
-          if (meterService && typeof meterService.getChargingStats === 'function') {
+          if (meterService && 
+              typeof meterService.getChargingStats === 'function' && 
+              meterService.isActive()) {
             const newStats = meterService.getChargingStats();
             if (newStats && typeof newStats === 'object') {
               setStats(prevStats => ({ ...prevStats, ...newStats }));
@@ -64,6 +68,11 @@ const ConnectorCard = ({
           }
         } catch (error) {
           console.warn(`⚠️ [ConnectorCard-${connectorId}] Error updating charging stats:`, error);
+          // Clear interval on error to prevent repeated errors
+          if (interval) {
+            clearInterval(interval);
+            interval = null;
+          }
         }
       }, 1000);
     }
@@ -156,6 +165,10 @@ const ConnectorCard = ({
 
     try {
       console.log(`⏹️ [ConnectorCard-${connectorId}] Stopping charging`);
+      
+      // Clear stats immediately to prevent race conditions
+      setStats({ ...INITIAL_STATS });
+      
       await onLocalStop(connectorId);
       console.log(`✅ [ConnectorCard-${connectorId}] Charging stopped successfully`);
     } catch (error) {
@@ -211,6 +224,8 @@ const ConnectorCard = ({
       // Delay to simulate finishing process
       setTimeout(async () => {
         try {
+          // Clear stats before stopping to prevent race conditions
+          setStats({ ...INITIAL_STATS });
           await onLocalStop(connectorId);
           console.log(`✅ [ConnectorCard-${connectorId}] Transaction finished successfully`);
         } catch (error) {
@@ -507,7 +522,7 @@ const ConnectorCard = ({
           </div>
           
           <div className="charging-time-label">
-            Thời gian sạc: <b>{stats.duration || '00:00:00'}</b>
+            Thời gian sạc: <b>{(stats && stats.duration) ? stats.duration : '00:00:00'}</b>
           </div>
           
           <div className="charging-details-grid">

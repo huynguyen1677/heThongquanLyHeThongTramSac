@@ -123,27 +123,37 @@ export class ChargingTimer {
    * Lấy thời gian đã trôi qua (tính bằng giây)
    */
   getElapsedSeconds() {
-    if (!this.startTime) return 0;
+    try {
+      if (!this.startTime) return 0;
 
-    let diffMs = new Date() - this.startTime;
-    diffMs -= this.pausedTime;
+      let diffMs = new Date() - this.startTime;
+      diffMs -= this.pausedTime;
 
-    if (this.pauseStartTime) {
-      diffMs -= (new Date() - this.pauseStartTime);
+      if (this.pauseStartTime) {
+        diffMs -= (new Date() - this.pauseStartTime);
+      }
+
+      return Math.max(0, Math.floor(diffMs / 1000));
+    } catch (error) {
+      console.error(`❌ [ChargingTimer-${this.connectorId}] Error calculating elapsed seconds:`, error);
+      return 0;
     }
-
-    return Math.max(0, Math.floor(diffMs / 1000));
   }
 
   /**
    * Lấy thời gian đã trôi qua (định dạng HH:MM:SS)
    */
   getDuration() {
-    const totalSeconds = this.getElapsedSeconds();
-    const hours = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
-    const minutes = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
-    const seconds = (totalSeconds % 60).toString().padStart(2, '0');
-    return `${hours}:${minutes}:${seconds}`;
+    try {
+      const totalSeconds = this.getElapsedSeconds();
+      const hours = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
+      const minutes = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
+      const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+      return `${hours}:${minutes}:${seconds}`;
+    } catch (error) {
+      console.error(`❌ [ChargingTimer-${this.connectorId}] Error getting duration:`, error);
+      return '00:00:00';
+    }
   }
 
   /**

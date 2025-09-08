@@ -68,16 +68,24 @@ export class MeterService {
    */
   stop() {
     try {
-      this.chargingTimer.stop();
+      if (this.chargingTimer) {
+        this.chargingTimer.stop();
+      }
       
       if (this.transactionId) {
         this.log(`🔋 Stopped meter service for transaction ${this.transactionId}`);
       }
 
+      // Reset all values
       this.transactionId = null;
       this.idTag = null;
       this.meterStart = 0;
       this.currentMeterValue = 0;
+      
+      // Reset state manager
+      if (this.stateManager) {
+        this.stateManager.reset();
+      }
       
       return true;
     } catch (error) {
@@ -220,12 +228,23 @@ export class MeterService {
         return defaultStats;
       }
 
+      // Safely get duration with fallback
+      let duration = '00:00:00';
+      try {
+        if (this.chargingTimer && typeof this.chargingTimer.getDuration === 'function') {
+          duration = this.chargingTimer.getDuration() || '00:00:00';
+        }
+      } catch (durationError) {
+        console.warn(`⚠️ [MeterService-${this.connectorId}] Error getting duration:`, durationError);
+        duration = '00:00:00';
+      }
+
       return {
         transactionId: this.transactionId,
         currentMeterValue: this.getCurrentMeterValue(),
         energyKwh: this.getEnergyConsumed(),
         powerKw: this.stateManager.getCurrentPowerKw() || 0,
-        duration: this.chargingTimer.getDuration() || '00:00:00',
+        duration: duration,
         estimatedCost: this.stateManager.getEstimatedCost() || 0,
         isRunning: this.isActive(),
         fullChargeThresholdKwh: this.stateManager.getFullChargeThreshold() || 2,
@@ -268,7 +287,7 @@ export class MeterService {
 
   isActive() {
     try {
-      return this.chargingTimer.isActive();
+      return this.chargingTimer && this.chargingTimer.isActive();
     } catch (error) {
       console.warn(`⚠️ [MeterService-${this.connectorId}] Error checking active state:`, error);
       return false;
