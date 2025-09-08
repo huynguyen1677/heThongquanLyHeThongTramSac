@@ -71,21 +71,6 @@ const ChargingHistory = ({ connectorId, onSessionSelect }) => {
     }
   };
 
-  const formatDuration = (duration) => {
-    if (!duration || duration <= 0) return '0s';
-    
-    const hours = Math.floor(duration / 3600);
-    const minutes = Math.floor((duration % 3600) / 60);
-    const seconds = Math.floor(duration % 60);
-    
-    if (hours > 0) {
-      return `${hours}h ${minutes}m ${seconds}s`;
-    } else if (minutes > 0) {
-      return `${minutes}m ${seconds}s`;
-    } else {
-      return `${seconds}s`;
-    }
-  };
 
   const formatEnergy = (wh) => {
     if (!wh || wh <= 0) return '0 Wh';
@@ -158,15 +143,21 @@ const ChargingHistory = ({ connectorId, onSessionSelect }) => {
                     <strong>{formatDateTime(session.endTime)}</strong>
                   </div>
                   <div className="session-stats">
-                    <span className="stat-item">
-                      ⏱️ {formatDuration(session.duration)}
-                    </span>
-                    <span className="stat-item">
-                      ⚡ {formatEnergy(session.energyConsumed)}
-                    </span>
-                    <span className="stat-item">
-                      💰 {formatCost(session.estimatedCost)}
-                    </span>
+                    {(() => {
+                      // Ưu tiên dùng dữ liệu thực tế khi kết thúc phiên sạc
+                      const energyStart = Number(session.meterStart) || 0;
+                      const energyEnd = Number(session.meterStop) || 0;
+                      const realCost = Number(session.cost) || Number(session.estimatedCost) || 0;
+                      const energyConsumed = energyEnd > energyStart ? energyEnd - energyStart : Number(session.energyConsumed) || 0;
+                      return <>
+                        <span className="stat-item">
+                          ⚡ {formatEnergy(energyConsumed)}
+                        </span>
+                        <span className="stat-item">
+                          💰 {formatCost(realCost)}
+                        </span>
+                      </>;
+                    })()}
                   </div>
                 </div>
                 <div className="session-status">
@@ -211,24 +202,30 @@ const ChargingHistory = ({ connectorId, onSessionSelect }) => {
                       <label>Điện năng kết thúc:</label>
                       <span>{formatEnergy(session.meterStop || 0)}</span>
                     </div>
-                    <div className="detail-item">
-                      <label>Công suất trung bình:</label>
-                      <span>
-                        {session.duration > 0 
-                          ? `${((session.energyConsumed / session.duration) * 3.6).toFixed(2)} kW`
-                          : '0 kW'
-                        }
-                      </span>
-                    </div>
-                    <div className="detail-item">
-                      <label>Giá điện:</label>
-                      <span>
-                        {session.energyConsumed > 0 && session.estimatedCost > 0
-                          ? `${(session.estimatedCost / (session.energyConsumed / 1000)).toFixed(0)} ₫/kWh`
-                          : 'N/A'
-                        }
-                      </span>
-                    </div>
+                    {(() => {
+                      const energyStart = Number(session.meterStart) || 0;
+                      const energyEnd = Number(session.meterStop) || 0;
+                      const duration = Number(session.duration) || 0;
+                      const energyConsumed = energyEnd > energyStart ? energyEnd - energyStart : Number(session.energyConsumed) || 0;
+                      // Công suất trung bình (kW)
+                      const avgPower = duration > 0 && energyConsumed > 0 ? (energyConsumed / duration) * 3.6 : null;
+                      // Giá điện thực tế (VND/kWh)
+                      const pricePerKwh = Number(session.pricePerKwh) || 0;
+                      return <>
+                        <div className="detail-item">
+                          <label>Công suất trung bình:</label>
+                          <span>
+                            {avgPower && avgPower > 0 ? `${avgPower.toFixed(2)} kW` : '--'}
+                          </span>
+                        </div>
+                        <div className="detail-item">
+                          <label>Giá điện:</label>
+                          <span>
+                            {pricePerKwh && pricePerKwh > 0 ? `${pricePerKwh.toLocaleString()} ₫/kWh` : '--'}
+                          </span>
+                        </div>
+                      </>;
+                    })()}
                   </div>
                 </div>
               )}
