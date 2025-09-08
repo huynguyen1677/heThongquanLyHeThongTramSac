@@ -175,7 +175,8 @@ export class MeterService {
           currentPowerKw
         );
 
-        // 4. Gửi realtime data
+        // 4. Gửi realtime data với đầy đủ thông tin
+        const currentStats = this.getChargingStats();
         await this.messageService.sendDataTransfer(
           'RealtimeUpdate',
           'ChargeThreshold',
@@ -184,6 +185,10 @@ export class MeterService {
             transactionId: this.transactionId,
             fullChargeThresholdKwh: this.stateManager.getFullChargeThreshold(),
             currentEnergyKwh: energyKwh,
+            // Thêm thông tin đầy đủ từ charging stats
+            duration: currentStats.duration,
+            estimatedCost: currentStats.estimatedCost,
+            powerKw: currentStats.powerKw,
             timestamp: new Date().toISOString()
           }
         );

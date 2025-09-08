@@ -766,7 +766,7 @@ class RealtimeService {
   }
 
   // Cập nhật ngưỡng sạc đầy cho connector
-  async updateConnectorThreshold(stationId, connectorId, fullChargeThresholdKwh, currentEnergyKwh) {
+  async updateConnectorThreshold(stationId, connectorId, fullChargeThresholdKwh, currentEnergyKwh, duration, estimatedCost, powerKw) {
     if (!this.isAvailable()) return false;
 
     try {
@@ -775,11 +775,15 @@ class RealtimeService {
         fullChargeThresholdKwh: fullChargeThresholdKwh,
         currentEnergyKwh: Math.round(currentEnergyKwh * 100) / 100,
         chargeProgress: Math.min(100, Math.round((currentEnergyKwh / fullChargeThresholdKwh) * 100)),
+        // Thêm thông tin đầy đủ từ client
+        duration: duration || '00:00:00',
+        estimatedCost: estimatedCost || 0,
+        powerKw: powerKw || 0,
         lastUpdate: getTimestamp()
       };
 
       await connectorRef.update(updateData);
-      logger.debug(`✅ Updated connector threshold: ${stationId}/${connectorId} - ${fullChargeThresholdKwh}kWh`);
+      logger.debug(`✅ Updated connector data: ${stationId}/${connectorId} - ${fullChargeThresholdKwh}kWh, ${duration}, $${estimatedCost}`);
       return true;
     } catch (error) {
       logger.error('Error updating connector threshold:', error);

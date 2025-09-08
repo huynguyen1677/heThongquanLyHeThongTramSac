@@ -108,24 +108,27 @@ export function useTransactionManager(
     }
 
     try {
-      // 1. Lấy giá trị meterStop từ meter service
+      // 1. Lấy stats từ meter service trước khi dừng
+      const sessionStats = meterService.getChargingStats();
+
+      // 2. Lấy giá trị meterStop từ meter service
       const meterStop = meterService.getCurrentMeterValue();
 
-      // 2. Dừng meter service trước
+      // 3. Dừng meter service
       const stopped = meterService.stop();
       if (!stopped) {
         console.warn(`⚠️ Failed to stop meter service for connector ${connectorId}`);
       }
 
-      // 3. Gửi StopTransaction qua OCPP
-      const sessionData = await transactionService.stopTransaction(
+      // 4. Gửi StopTransaction qua OCPP
+      await transactionService.stopTransaction(
         connector.transactionId,
         connectorId,
         meterStop,
         meterService.idTag || 'DEMO_USER'
       );
 
-      // 4. Cập nhật trạng thái connector
+      // 5. Cập nhật trạng thái connector
       updateConnector(connectorId, {
         status: 'Available',
         transactionId: null
@@ -138,7 +141,12 @@ export function useTransactionManager(
         timestamp: new Date().toISOString()
       });
 
-      return sessionData;
+      // 6. Trả về dữ liệu từ 1 nguồn duy nhất - sessionStats từ meterService
+      return {
+        sessionStats,
+        meterStop,
+        connector
+      };
     } catch (error) {
       addLog({
         type: 'log',

@@ -521,7 +521,10 @@ export class OcppWebSocketServer {
           stationId,
           data.connectorId,
           data.fullChargeThresholdKwh,
-          data.currentEnergyKwh
+          data.currentEnergyKwh,
+          data.duration,
+          data.estimatedCost,
+          data.powerKw
         );
         
         logger.info(`✅ Updated charge threshold for ${stationId}/${data.connectorId}: ${data.fullChargeThresholdKwh}kWh`);
