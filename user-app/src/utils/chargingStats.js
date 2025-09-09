@@ -118,17 +118,7 @@ export function averageSessionDuration(chargingHistory) {
   return Math.round(totalDuration / chargingHistory.length);
 }
 
-/**
- * Tính chi phí phiên sạc dựa trên năng lượng tiêu thụ
- */
-export function calculateSessionCost(energyConsumedWh, pricePerKWh = 3000) {
-  if (!energyConsumedWh || energyConsumedWh <= 0) return 0;
-  
-  const energyKWh = energyConsumedWh / 1000;
-  const cost = energyKWh * pricePerKWh;
-  
-  return Math.round(cost);
-}
+
 
 /**
  * Tạo giao dịch thanh toán cho phiên sạc

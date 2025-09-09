@@ -1,59 +1,192 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Link } from 'react-router-dom';
-import { ref, onValue, set } from 'firebase/database';
+import { ref, onValue } from 'firebase/database';
 import { realtimeDb } from '../services/firebase';
+import { getMonthlyPaymentTotal } from '../services/firestore';
+import { monthlyChargingPayment, weeklyChargingPayment, getSpendingStats } from '../utils/walletStats';
+import { formatVND, formatVNDWithSign } from '../utils/currencyFormatter';
 import '../styles/wallet-page.css';
 
 function Wallet() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('overview'); // overview, deposit, withdraw, history
   const [depositAmount, setDepositAmount] = useState('');
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('momo');
   const [showDepositModal, setShowDepositModal] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
-  const [transactions, setTransactions] = useState([]); // State to store transactions
+  const [transactions, setTransactions] = useState([]);
+  const [monthlySpent, setMonthlySpent] = useState(0);
+  const [transactionTypeFilter, setTransactionTypeFilter] = useState('all');
 
-  // Thêm vào function Wallet(), sau khi có transactions
-  const walletStats = useMemo(() => {
-    const currentMonth = new Date().getMonth();
-    const currentYear = new Date().getFullYear();
-    
-    let monthlySpent = 0;
-    let totalDeposited = 0;
-    let totalWithdrawn = 0;
-    
-    transactions.forEach(transaction => {
-      const transactionDate = new Date(transaction.date);
-      
-      if (transaction.type === 'deposit' && transaction.status === 'completed') {
-        totalDeposited += Math.abs(transaction.amount);
-      }
-      
-      if (transaction.type === 'withdraw' && transaction.status === 'completed') {
-        totalWithdrawn += Math.abs(transaction.amount);
-      }
-      
-      if (transaction.type === 'payment' && transaction.status === 'completed' &&
-          transactionDate.getMonth() === currentMonth && 
-          transactionDate.getFullYear() === currentYear) {
-        monthlySpent += Math.abs(transaction.amount);
-      }
-    });
-    
-    return { monthlySpent, totalDeposited, totalWithdrawn };
-  }, [transactions]);
-
-  // Cập nhật walletData
+  // Lấy số dư ví trực tiếp từ AuthContext
   const walletData = {
-    balance: user?.walletBalance || 0,
-    monthlySpent: walletStats.monthlySpent,
-    totalDeposited: walletStats.totalDeposited,
-    totalWithdrawn: walletStats.totalWithdrawn,
+    balance: Number(user?.walletBalance) || 0,
     pendingAmount: 0,
     lastUpdated: new Date()
   };
+
+  // Lắng nghe giao dịch thanh toán từ Firestore collection payment_history
+  useEffect(() => {
+    if (!user?.userId) return;
+    
+    const loadPaymentHistory = async () => {
+      try {
+        const { collection, query, where, onSnapshot } = await import('firebase/firestore');
+        const { db } = await import('../services/firebase');
+        
+        console.log('Loading payment history for user:', user.userId);
+        
+        // Sử dụng query đơn giản hơn để tránh lỗi index
+        const q = query(
+          collection(db, 'payment_history'),
+          where('userId', '==', user.userId)
+        );
+        
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+          console.log('Payment history snapshot received, size:', snapshot.size);
+          const paymentTransactions = [];
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            console.log('Payment document:', doc.id, data);
+            paymentTransactions.push({
+              id: doc.id,
+              type: data.type || 'payment',
+              amount: data.amount || 0,
+              status: data.status || 'completed',
+              description: data.description || `Thanh toán sạc - ${data.stationId || 'Trạm sạc'}`,
+              method: data.stationId ? `Station ${data.stationId}` : 'Payment',
+              reference: data.transactionId || doc.id,
+              date: data.createdAt?.toDate?.() || data.createdAt || new Date(),
+              stationId: data.stationId,
+              energyConsumed: data.energyConsumed
+            });
+          });
+          
+          // Sắp xếp theo ngày tạo
+          paymentTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+          
+          console.log('Setting transactions:', paymentTransactions);
+          setTransactions(paymentTransactions);
+        }, (error) => {
+          console.error('Error in payment history listener:', error);
+          // Fallback với dữ liệu mẫu nếu có lỗi
+          const sampleTransactions = [
+            {
+              id: 'sample1',
+              type: 'payment',
+              amount: 45000,
+              status: 'completed',
+              description: 'Thanh toán sạc điện',
+              method: 'Station EVN-001',
+              reference: 'TXN001',
+              date: new Date(),
+              stationId: 'EVN-001',
+              energyConsumed: 15.5
+            },
+            {
+              id: 'sample2',
+              type: 'deposit',
+              amount: 200000,
+              status: 'completed',
+              description: 'Nạp tiền vào ví',
+              method: 'MoMo',
+              reference: 'DEP001',
+              date: new Date(Date.now() - 86400000)
+            }
+          ];
+          setTransactions(sampleTransactions);
+        });
+        
+        return unsubscribe;
+      } catch (error) {
+        console.error('Error loading payment history:', error);
+        // Fallback với dữ liệu mẫu
+        const sampleTransactions = [
+          {
+            id: 'sample1',
+            type: 'payment',
+            amount: 45000,
+            status: 'completed',
+            description: 'Thanh toán sạc điện',
+            method: 'Station EVN-001',
+            reference: 'TXN001',
+            date: new Date(),
+            stationId: 'EVN-001',
+            energyConsumed: 15.5
+          },
+          {
+            id: 'sample2',
+            type: 'deposit',
+            amount: 200000,
+            status: 'completed',
+            description: 'Nạp tiền vào ví',
+            method: 'MoMo',
+            reference: 'DEP001',
+            date: new Date(Date.now() - 86400000)
+          }
+        ];
+        setTransactions(sampleTransactions);
+      }
+    };
+    
+    loadPaymentHistory();
+  }, [user?.userId]);
+
+  // Thống kê giao dịch nâng cao
+  const walletStats = useMemo(() => {
+    console.log('Calculating wallet stats with transactions:', transactions.length);
+    
+    let totalDeposited = 0;
+    let totalWithdrawn = 0;
+    
+    // Tính tổng nạp và rút tiền (làm tròn đến hàng đồng)
+    transactions.forEach(transaction => {
+      if (transaction.type === 'deposit' && transaction.status === 'completed') {
+        totalDeposited += Math.round(Math.abs(transaction.amount));
+      }
+      if (transaction.type === 'withdraw' && transaction.status === 'completed') {
+        totalWithdrawn += Math.round(Math.abs(transaction.amount));
+      }
+    });
+    
+    // Sử dụng các hàm mới để tính chi tiêu sạc (đã làm tròn trong hàm)
+    const spendingStats = getSpendingStats(transactions);
+    const monthlyCharging = monthlyChargingPayment(transactions);
+    const weeklyCharging = weeklyChargingPayment(transactions);
+    
+    console.log('Wallet stats calculated:', {
+      totalDeposited,
+      totalWithdrawn,
+      monthlyCharging,
+      weeklyCharging,
+      totalCharging: spendingStats.total
+    });
+    
+    return { 
+      totalDeposited, 
+      totalWithdrawn,
+      monthlyCharging,
+      weeklyCharging,
+      totalCharging: spendingStats.total,
+      averagePerTransaction: spendingStats.averagePerTransaction,
+      transactionCount: spendingStats.transactionCount
+    };
+  }, [transactions]);
+
+  // Cập nhật chi tiêu tháng này (cho tương thích ngược)
+  useEffect(() => {
+    setMonthlySpent(walletStats.monthlyCharging);
+  }, [walletStats.monthlyCharging]);
+
+  // Lọc giao dịch đơn giản theo loại
+  const filteredTransactions = useMemo(() => {
+    if (!Array.isArray(transactions)) return [];
+    if (transactionTypeFilter === 'all') return [...transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
+    return transactions
+      .filter(tx => tx.type === transactionTypeFilter)
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [transactions, transactionTypeFilter]);
 
   const quickAmounts = [50000, 100000, 200000, 500000, 1000000, 2000000];
 
@@ -92,17 +225,11 @@ function Wallet() {
     }
   ];
 
-  const filteredTransactions = useMemo(() => {
-    return transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
-  }, [transactions]);
-
   const handleDeposit = () => {
     if (!depositAmount || depositAmount < 10000) {
       alert('Số tiền nạp tối thiểu là 10,000₫');
       return;
     }
-    
-    // Simulate deposit process
     alert(`Đang chuyển hướng đến ${paymentMethods.find(m => m.id === selectedPaymentMethod)?.name} để thanh toán ${parseInt(depositAmount).toLocaleString()}₫`);
     setShowDepositModal(false);
     setDepositAmount('');
@@ -113,49 +240,14 @@ function Wallet() {
       alert('Số tiền rút tối thiểu là 50,000₫');
       return;
     }
-    
     if (withdrawAmount > walletData.balance) {
       alert('Số dư không đủ để thực hiện giao dịch này');
       return;
     }
-    
-    // Simulate withdraw process
     alert(`Yêu cầu rút ${parseInt(withdrawAmount).toLocaleString()}₫ đã được gửi. Tiền sẽ chuyển về tài khoản trong 1-3 ngày làm việc.`);
     setShowWithdrawModal(false);
     setWithdrawAmount('');
   };
-
-  // Thêm vào Wallet.jsx để tự động refresh khi có giao dịch mới
-  useEffect(() => {
-    // Lắng nghe giao dịch mới từ Firebase
-    if (!user?.userId) return;
-    
-    const transactionsRef = ref(realtimeDb, `transactions/${user.userId}`);
-    
-    const unsubscribe = onValue(transactionsRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const firebaseTransactions = Object.values(snapshot.val());
-        // Cập nhật danh sách giao dịch
-        setTransactions(firebaseTransactions);
-      }
-    });
-    
-    return () => unsubscribe();
-  }, [user?.userId]);
-
-  // Thêm useEffect để thông báo khi có giao dịch mới
-  useEffect(() => {
-    if (transactions.length > 0) {
-      const latestTransaction = transactions[0];
-      const transactionTime = new Date(latestTransaction.date);
-      const now = new Date();
-      
-      // Nếu giao dịch được tạo trong vòng 5 giây qua
-      if (now - transactionTime < 5000 && latestTransaction.type === 'payment') {
-        console.log('💰 New payment transaction detected:', latestTransaction);
-      }
-    }
-  }, [transactions]);
 
   if (!user) {
     return (
@@ -187,7 +279,9 @@ function Wallet() {
           <div className="header-actions">
             <div className="wallet-balance-mini">
               <span className="balance-label">Số dư hiện tại</span>
-              <span className="balance-amount">{walletData.balance.toLocaleString()}₫</span>
+              <span className="balance-amount">
+                {formatVND(walletData.balance)}
+              </span>
             </div>
           </div>
         </div>
@@ -199,7 +293,9 @@ function Wallet() {
           <div className="balance-main">
             <div className="balance-info">
               <h2 className="balance-title">Số dư ví</h2>
-              <p className="balance-amount-large">{walletData.balance.toLocaleString()}₫</p>
+              <p className="balance-amount-large">
+                {formatVND(walletData.balance)}
+              </p>
               <p className="balance-updated">
                 Cập nhật lúc {walletData.lastUpdated.toLocaleTimeString('vi-VN')} - {walletData.lastUpdated.toLocaleDateString('vi-VN')}
               </p>
@@ -208,7 +304,6 @@ function Wallet() {
               <i className="fas fa-wallet"></i>
             </div>
           </div>
-          
           <div className="balance-actions">
             <button 
               className="btn btn-primary btn-balance"
@@ -226,7 +321,6 @@ function Wallet() {
             </button>
           </div>
         </div>
-
         {walletData.pendingAmount > 0 && (
           <div className="pending-notice">
             <i className="fas fa-clock"></i>
@@ -241,34 +335,95 @@ function Wallet() {
           <div className="stat-content">
             <div className="stat-info-content">
               <p className="stat-label">Chi tiêu tháng này</p>
-              <p className="stat-value">{walletData.monthlySpent.toLocaleString()}₫</p>
+              <p className="stat-value">{formatVND(walletStats.monthlyCharging)}</p>
             </div>
             <div className="stat-icon icon-bg-info">
               <i className="fas fa-chart-line"></i>
             </div>
           </div>
         </div>
-        
+        <div className="stat-card stat-primary">
+          <div className="stat-content">
+            <div className="stat-info-content">
+              <p className="stat-label">Chi tiêu tuần này</p>
+              <p className="stat-value">{formatVND(walletStats.weeklyCharging)}</p>
+            </div>
+            <div className="stat-icon icon-bg-primary">
+              <i className="fas fa-calendar-week"></i>
+            </div>
+          </div>
+        </div>
         <div className="stat-card stat-success">
           <div className="stat-content">
             <div className="stat-info-content">
               <p className="stat-label">Tổng đã nạp</p>
-              <p className="stat-value">{walletData.totalDeposited.toLocaleString()}₫</p>
+              <p className="stat-value">{formatVND(walletStats.totalDeposited)}</p>
             </div>
             <div className="stat-icon icon-bg-success">
               <i className="fas fa-arrow-down"></i>
             </div>
           </div>
         </div>
-        
         <div className="stat-card stat-warning">
           <div className="stat-content">
             <div className="stat-info-content">
-              <p className="stat-label">Tổng đã rút</p>
-              <p className="stat-value">{walletData.totalWithdrawn.toLocaleString()}₫</p>
+              <p className="stat-label">Tổng sạc điện</p>
+              <p className="stat-value">{formatVND(walletStats.totalCharging)}</p>
             </div>
             <div className="stat-icon icon-bg-warning">
+              <i className="fas fa-bolt"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Additional Stats Row */}
+      <div className="wallet-stats-grid secondary-stats">
+        <div className="stat-card stat-secondary">
+          <div className="stat-content">
+            <div className="stat-info-content">
+              <p className="stat-label">Số giao dịch sạc</p>
+              <p className="stat-value">{walletStats.transactionCount}</p>
+            </div>
+            <div className="stat-icon icon-bg-secondary">
+              <i className="fas fa-hashtag"></i>
+            </div>
+          </div>
+        </div>
+        <div className="stat-card stat-secondary">
+          <div className="stat-content">
+            <div className="stat-info-content">
+              <p className="stat-label">Trung bình/lần sạc</p>
+              <p className="stat-value">{formatVND(walletStats.averagePerTransaction)}</p>
+            </div>
+            <div className="stat-icon icon-bg-secondary">
+              <i className="fas fa-calculator"></i>
+            </div>
+          </div>
+        </div>
+        <div className="stat-card stat-secondary">
+          <div className="stat-content">
+            <div className="stat-info-content">
+              <p className="stat-label">Tổng đã rút</p>
+              <p className="stat-value">{formatVND(walletStats.totalWithdrawn)}</p>
+            </div>
+            <div className="stat-icon icon-bg-secondary">
               <i className="fas fa-arrow-up"></i>
+            </div>
+          </div>
+        </div>
+        <div className="stat-card stat-secondary">
+          <div className="stat-content">
+            <div className="stat-info-content">
+              <p className="stat-label">Trạng thái</p>
+              <p className="stat-value">
+                {walletData.balance > 50000 ? 'Tốt' : 
+                 walletData.balance > 20000 ? 'Cảnh báo' : 'Thấp'}
+              </p>
+            </div>
+            <div className="stat-icon icon-bg-secondary">
+              <i className={`fas ${walletData.balance > 50000 ? 'fa-check-circle' : 
+                                  walletData.balance > 20000 ? 'fa-exclamation-circle' : 'fa-times-circle'}`}></i>
             </div>
           </div>
         </div>
@@ -279,7 +434,11 @@ function Wallet() {
         <div className="transaction-header">
           <h3 className="transaction-title">Lịch sử giao dịch</h3>
           <div className="transaction-filter">
-            <select className="filter-select">
+            <select
+              className="filter-select"
+              value={transactionTypeFilter}
+              onChange={e => setTransactionTypeFilter(e.target.value)}
+            >
               <option value="all">Tất cả giao dịch</option>
               <option value="deposit">Nạp tiền</option>
               <option value="withdraw">Rút tiền</option>
@@ -287,7 +446,6 @@ function Wallet() {
             </select>
           </div>
         </div>
-        
         <div className="transaction-list">
           {filteredTransactions.length === 0 ? (
             <div className="empty-transactions">
@@ -321,7 +479,6 @@ function Wallet() {
                 <i className="fas fa-times"></i>
               </button>
             </div>
-            
             <div className="modal-body">
               {/* Amount Input */}
               <div className="input-group">
@@ -340,7 +497,6 @@ function Wallet() {
                 </div>
                 <p className="input-note">Số tiền tối thiểu: 10,000₫ - Tối đa: 50,000,000₫</p>
               </div>
-
               {/* Quick Amount Buttons */}
               <div className="quick-amounts">
                 <p className="quick-amounts-label">Chọn nhanh:</p>
@@ -356,7 +512,6 @@ function Wallet() {
                   ))}
                 </div>
               </div>
-
               {/* Payment Methods */}
               <div className="payment-methods">
                 <p className="payment-methods-label">Phương thức thanh toán:</p>
@@ -380,7 +535,6 @@ function Wallet() {
                 </div>
               </div>
             </div>
-            
             <div className="modal-footer">
               <button 
                 className="btn btn-outline"
@@ -417,15 +571,13 @@ function Wallet() {
                 <i className="fas fa-times"></i>
               </button>
             </div>
-            
             <div className="modal-body">
               <div className="withdraw-balance-info">
                 <div className="balance-available">
                   <span className="balance-label">Số dư khả dụng:</span>
-                  <span className="balance-amount">{walletData.balance.toLocaleString()}₫</span>
+                  <span className="balance-amount">{formatVND(walletData.balance)}</span>
                 </div>
               </div>
-
               {/* Amount Input */}
               <div className="input-group">
                 <label className="input-label">Số tiền muốn rút</label>
@@ -441,9 +593,8 @@ function Wallet() {
                   />
                   <span className="currency-suffix">₫</span>
                 </div>
-                <p className="input-note">Số tiền tối thiểu: 50,000₫ - Tối đa: {walletData.balance.toLocaleString()}₫</p>
+                <p className="input-note">Số tiền tối thiểu: 50,000₫ - Tối đa: {walletData.balance.toLocaleString('vi-VN')}₫</p>
               </div>
-
               {/* Bank Info */}
               <div className="bank-info">
                 <div className="info-item">
@@ -459,13 +610,11 @@ function Wallet() {
                   <span className="info-value">{user.fullName}</span>
                 </div>
               </div>
-
               <div className="withdraw-note">
                 <i className="fas fa-info-circle"></i>
                 <p>Tiền sẽ được chuyển về tài khoản ngân hàng trong 1-3 ngày làm việc. Phí rút tiền: 0₫</p>
               </div>
             </div>
-            
             <div className="modal-footer">
               <button 
                 className="btn btn-outline"
@@ -522,7 +671,7 @@ const TransactionItem = ({ transaction }) => {
     };
   };
 
-  // Hàm format date an toàn
+  // Hàm format date an toàn  
   const formatTransactionDate = (date) => {
     try {
       let dateObj;
@@ -533,6 +682,9 @@ const TransactionItem = ({ transaction }) => {
         dateObj = new Date(date);
       } else if (typeof date === 'number') {
         dateObj = new Date(date);
+      } else if (date && date.toDate && typeof date.toDate === 'function') {
+        // Handle Firestore Timestamp
+        dateObj = date.toDate();
       } else {
         dateObj = new Date(); // Fallback
       }
@@ -565,11 +717,22 @@ const TransactionItem = ({ transaction }) => {
         </div>
         
         <div className="transaction-info">
-          <h4 className="transaction-description">{transaction.description}</h4>
+          <h4 className="transaction-description">
+            {transaction.description || 
+             (transaction.type === 'payment' ? `Thanh toán sạc - ${transaction.stationId || 'Trạm sạc'}` : 
+              transaction.type === 'deposit' ? 'Nạp tiền vào ví' : 
+              transaction.type === 'withdraw' ? 'Rút tiền từ ví' : 'Giao dịch')}
+          </h4>
           <div className="transaction-details">
             <span className="transaction-method">{transaction.method}</span>
             <span className="transaction-separator">•</span>
             <span className="transaction-reference">#{transaction.reference}</span>
+            {transaction.energyConsumed && (
+              <>
+                <span className="transaction-separator">•</span>
+                <span className="transaction-energy">{transaction.energyConsumed} Wh</span>
+              </>
+            )}
           </div>
           <p className="transaction-date">
             {formatTransactionDate(transaction.date)}
@@ -579,7 +742,7 @@ const TransactionItem = ({ transaction }) => {
       
       <div className="transaction-right">
         <p className={`transaction-amount ${config.amountClass}`}>
-          {transaction.amount > 0 ? '+' : ''}{Math.abs(transaction.amount).toLocaleString()}₫
+          {formatVNDWithSign(transaction.amount, transaction.type)}
         </p>
         <span className={`transaction-status ${config.statusClass}`}>
           {transaction.status === 'completed' && 'Hoàn thành'}

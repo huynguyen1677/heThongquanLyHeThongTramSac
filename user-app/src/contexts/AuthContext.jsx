@@ -61,27 +61,6 @@ export const AuthProvider = ({ children }) => {
     return unsubscribe
   }, [])
 
-  useEffect(() => {
-    if (!user?.userId) return;
-    
-    // Lắng nghe thay đổi số dư ví từ Firebase
-    const walletRef = ref(realtimeDb, `users/${user.userId}/walletBalance`);
-    
-    const unsubscribe = onValue(walletRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const newBalance = snapshot.val();
-        console.log('💰 Wallet balance updated:', newBalance);
-        
-        setUser(prev => ({
-          ...prev,
-          walletBalance: newBalance
-        }));
-      }
-    });
-    
-    return () => unsubscribe();
-  }, [user?.userId])
-
   const login = async (email, password) => {
     try {
       setLoading(true)

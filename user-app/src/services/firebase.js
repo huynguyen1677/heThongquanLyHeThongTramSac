@@ -17,6 +17,7 @@ const app = initializeApp(firebaseConfig)
 
 export const auth = getAuth(app)
 export const db = getFirestore(app)
+export const firestoreDb = getFirestore(app) // Alias for compatibility
 export const realtimeDb = getDatabase(app)
 
 export default app
