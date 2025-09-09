@@ -34,7 +34,7 @@ function ChargingCompleteModal({ session, open, onClose }) {
             </div>
             <div className="summary-item highlight">
               <span className="summary-label">Tổng chi phí:</span>
-              <span className="summary-value">{session.session_cost?.toLocaleString('vi-VN')}₫</span>
+              <span className="summary-value">{session.estimatedCost?.toLocaleString('vi-VN')}₫</span>
             </div>
             <div className="summary-item">
               <span className="summary-label">Kết thúc lúc:</span>

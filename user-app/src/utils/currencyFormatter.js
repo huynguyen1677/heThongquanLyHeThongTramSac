@@ -103,6 +103,36 @@ export function formatVNDCompact(amount) {
 }
 
 /**
+ * Formats kWh values consistently with decimal places
+ * @param {number} kwh - Energy in kWh
+ * @returns {string} - Formatted kWh string
+ */
+export function formatKwh(kwh) {
+  if (!kwh || kwh <= 0) return '0.00 kWh';
+  
+  // kWh hiển thị với 2 chữ số thập phân
+  return `${Number(kwh).toFixed(2)} kWh`;
+}
+
+/**
+ * Formats energy values (Wh or kWh)
+ * @param {number} wh - Energy in Wh
+ * @returns {string} - Formatted energy string
+ */
+export function formatEnergy(wh) {
+  if (!wh || wh <= 0) return '0 Wh';
+  
+  const roundedWh = Math.round(Number(wh));
+  
+  if (roundedWh >= 1000) {
+    // kWh với 2 chữ số thập phân
+    return `${(roundedWh / 1000).toFixed(2)} kWh`;
+  }
+  // Wh nguyên
+  return `${roundedWh} Wh`;
+}
+
+/**
  * Checks if an amount is valid for transaction
  * @param {number|string} amount - The amount to validate
  * @param {number} minAmount - Minimum allowed amount (default: 1000)

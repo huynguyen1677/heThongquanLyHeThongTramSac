@@ -49,8 +49,8 @@ const ChargingSession = () => {
 
   // Format số điện năng (kWh)
   const formatKwh = (kwh) => {
-    if (!kwh) return '0.00'
-    return parseFloat(kwh).toFixed(2)
+    if (!kwh) return '0.00 kWh'
+    return formatKwhUtil(kwh)
   }
 
   // Format công suất (từ W sang kW)

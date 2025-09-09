@@ -270,8 +270,8 @@ class RealtimeService {
       // StopTransaction sends a final Wh_total here.
       if (statusData.Wh_total !== undefined) {
         data.Wh_total = statusData.Wh_total;
-        data.kwh = Math.round((statusData.Wh_total / 1000) * 100) / 100;
-        data.costEstimate = Math.round(data.kwh * this.pricePerKwh);     // kWh*price, làm tròn, để UI hiện tức thời
+        data.kwh = Math.round((statusData.Wh_total / 1000) * 100) / 100;  // kWh với 2 chữ số thập phân
+        data.costEstimate = Math.round(data.kwh * this.pricePerKwh);     // Cost làm tròn đồng
       }
 
       // Cập nhật công suất hiện tại
@@ -317,15 +317,15 @@ class RealtimeService {
       const connectorRef = this.db.ref(`live/stations/${stationId}/connectors/${connectorId}`);
       const data = {
         Wh_total: newWhTotal,                             // Giá trị đồng hồ tích lũy (chỉ tăng)
-        session_kwh: Math.round((sessionWh / 1000) * 100) / 100,  // kWh của session hiện tại
+        session_kwh: Math.round((sessionWh / 1000) * 100) / 100,  // kWh session với 2 chữ số thập phân
         W_now: meterData.W_now || meterData.power || 0,   // công suất hiện tại (W)
         lastUpdate: getTimestamp()                        // epoch millis (server time)
       };
 
       // Tính toán giá trị hiển thị cho app
-      data.kwh = Math.round((newWhTotal / 1000) * 100) / 100;           // Tổng kWh tích lũy (dùng cho UI)
-      data.costEstimate = Math.round(data.kwh * this.pricePerKwh);       // Tổng cost tích lũy
-      data.session_cost = Math.round(data.session_kwh * this.pricePerKwh); // Chi phí session hiện tại
+      data.kwh = Math.round((newWhTotal / 1000) * 100) / 100;           // Tổng kWh với 2 chữ số thập phân
+      data.costEstimate = Math.round(data.kwh * this.pricePerKwh);       // Tổng cost làm tròn đồng
+      data.session_cost = Math.round(data.session_kwh * this.pricePerKwh); // Chi phí session làm tròn đồng
 
       await connectorRef.update(data);
       return true;

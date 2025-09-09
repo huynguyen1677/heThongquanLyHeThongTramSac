@@ -8,6 +8,7 @@ import { countMonthlyCharges, totalMonthlyEnergy, calculateCO2Saved } from "../u
 import useChargingHistory from "../contexts/useChargingHistory";
 import { listenUserCharging } from "../services/realtime"; // Import hàm mới
 import ChargingCompleteModal from "../components/ChargingCompleteModal";
+import { es } from "date-fns/locale";
 
 function Home() {
   const { stations, stationsLoading: loading, stationsError: error, confirmationRequest, respondConfirmation } = useCharging();
@@ -58,6 +59,7 @@ function Home() {
           fullChargeThresholdKwh: data.fullChargeThresholdKwh || 0,
           session_cost: data.session_cost || 0,
           costEstimate: data.costEstimate || 0,
+          estimatedCost: data.estimatedCost || 0,
           userId: data.userId,
           txId: data.txId,
           lastUpdate: data.lastUpdate,
@@ -225,7 +227,6 @@ function Home() {
                 Trạng thái sạc hiện tại
                 <span className="realtime-indicator">
                   <i className="fas fa-circle" style={{color: '#4CAF50', fontSize: '8px'}}></i>
-                  REALTIME
                 </span>
               </h3>
               <p className="charging-station">Trạm sạc: {currentCharging.station}</p>
@@ -254,7 +255,7 @@ function Home() {
                 </div>
                 <div className="detail-row">
                   <span className="detail-label">Chi phí thực tế:</span>
-                  <span className="detail-value">{currentCharging.session_cost.toLocaleString('vi-VN')}₫</span>
+                  <span className="detail-value">{currentCharging.estimatedCost.toLocaleString('vi-VN')}₫</span>
                 </div>
               </div>
             </div>

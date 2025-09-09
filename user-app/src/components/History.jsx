@@ -68,8 +68,8 @@ function History() {
     return {
       totalSessions,
       completedSessions: completedSessionsArr.length,
-      totalEnergy: totalEnergykWh.toFixed(2),
-      totalCost: Math.round(totalCost),
+      totalEnergy: formatKwh(totalEnergykWh).replace(' kWh', ''), // Chỉ lấy số với 2 chữ số thập phân
+      totalCost: Math.round(totalCost), // Cost làm tròn đồng
       avgDuration: completedSessionsArr.length > 0 ? Math.round(totalDuration / completedSessionsArr.length) : 0
     };
   }, [filteredSessions])

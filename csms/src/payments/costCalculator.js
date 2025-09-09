@@ -30,36 +30,24 @@ export class CostCalculator {
         currentPricePerKwh = await this.getCurrentPricePerKwh();
       }
 
-      // Tính cost cơ bản theo năng lượng
-      // Chuyển Wh sang kWh nếu cần
+      // BTH - Tính cost theo simulator logic
+      // Chuyển Wh sang kWh
       const energyKwh = energyConsumed / 1000;
       const energyCost = energyKwh * currentPricePerKwh;
 
-      // Tính phí dịch vụ (có thể thay đổi theo station)
-      const serviceFeeRate = await this.getServiceFeeRate(stationId);
-      const serviceFee = energyCost * serviceFeeRate;
-
-      // Tính phí theo thời gian (nếu có)
-      const timeFee = await this.calculateTimeFee(duration, stationId);
-
-      // Tính thuế
-      const taxRate = await this.getTaxRate();
-      const subtotal = energyCost + serviceFee + timeFee;
-      const tax = subtotal * taxRate;
-
-      // Tổng chi phí
-      const totalCost = subtotal + tax;
+      // BTH - Làm tròn lên (ceiling) như simulator để match
+      const totalCost = Math.ceil(energyCost);
 
       const costBreakdown = {
-        energyConsumed: energyKwh, // không làm tròn
+        energyConsumed: Math.round(energyKwh * 100) / 100, // kWh với 2 chữ số thập phân
         duration: duration,
         pricePerKwh: currentPricePerKwh,
-        energyCost: energyCost,
-        serviceFee: serviceFee,
-        timeFee: timeFee,
-        tax: tax,
-        subtotal: subtotal,
-        totalCost: totalCost,
+        energyCost: Math.ceil(energyCost),      // BTH - làm tròn lên như simulator
+        serviceFee: 0,                          // BTH - không phí dịch vụ
+        timeFee: 0,                             // BTH - không phí thời gian
+        tax: 0,                                 // BTH - không thuế
+        subtotal: Math.ceil(energyCost),        // BTH - chỉ có năng lượng
+        totalCost: totalCost,                   // BTH - tổng = năng lượng (ceiling)
         currency: 'VND',
         calculatedAt: new Date().toISOString()
       };

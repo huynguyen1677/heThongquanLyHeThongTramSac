@@ -279,7 +279,7 @@ const StationCard = ({ station }) => {
               {connector.status === 'Charging' && connector.currentPower > 0 && (
                 <div className="text-xs text-blue-600 mt-1">
                   {(connector.currentPower / 1000).toFixed(1)}kW
-                  {connector.sessionKwh > 0 && ` • ${connector.sessionKwh.toFixed(2)}kWh`}
+                  {connector.sessionKwh > 0 && ` • ${formatKwh(connector.sessionKwh)}`}
                 </div>
               )}
               
