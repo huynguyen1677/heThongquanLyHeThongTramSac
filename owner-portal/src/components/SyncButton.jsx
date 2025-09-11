@@ -116,7 +116,8 @@ const SyncButton = ({ ownerId, onSyncComplete }) => {
         >
           <span style={{ 
             fontSize: '1rem',
-            animation: isSyncing ? 'spin 1s linear infinite' : 'none'
+            animation: isSyncing ? 'spin 1s linear infinite' : 'none',
+            display: 'inline-block'
           }}>
             {getSyncStatusIcon()}
           </span>
@@ -150,26 +151,6 @@ const SyncButton = ({ ownerId, onSyncComplete }) => {
           </div>
         )}
       </div>
-
-      <div style={{ 
-        marginTop: '0.75rem',
-        padding: '0.75rem',
-        background: '#fffbeb',
-        border: '1px solid #fcd34d',
-        borderRadius: '6px',
-        fontSize: '0.875rem',
-        color: '#92400e'
-      }}>
-        <strong>💡 Ghi chú:</strong> Đồng bộ thủ công giúp tiết kiệm tài nguyên Firebase. 
-        Chỉ thực hiện khi cần cập nhật dữ liệu từ RealtimeDB sang Firestore.
-      </div>
-
-      <style jsx>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   );
 };

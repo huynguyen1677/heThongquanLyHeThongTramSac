@@ -105,17 +105,25 @@ function Home() {
 
   // Cập nhật thời gian sạc mỗi giây
   useEffect(() => {
-    if (!currentCharging || !currentCharging.isCharging || !currentCharging.txId) return;
+    if (!currentCharging || !currentCharging.isCharging || !currentCharging.txId) {
+      // Nếu không còn đang sạc, không tạo interval
+      return;
+    }
 
     const interval = setInterval(() => {
-      const startTime = parseInt(currentCharging.txId);
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      const minutes = Math.floor(elapsed / 60);
-      const seconds = elapsed % 60;
-      const timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-      
+      // Kiểm tra lại currentCharging trong callback
       setCurrentCharging(prev => {
-        if (!prev || !prev.isCharging) return prev;
+        if (!prev || !prev.isCharging || prev.status !== "Charging") {
+          // Nếu không còn đang sạc, không cập nhật nữa
+          return prev;
+        }
+        
+        const startTime = parseInt(prev.txId);
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        const minutes = Math.floor(elapsed / 60);
+        const seconds = elapsed % 60;
+        const timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        
         return {
           ...prev,
           time: timeString
@@ -123,8 +131,10 @@ function Home() {
       });
     }, 1000);
 
-    return () => clearInterval(interval);
-  }, [currentCharging?.txId]); // Chỉ phụ thuộc vào txId
+    return () => {
+      clearInterval(interval);
+    };
+  }, [currentCharging?.txId, currentCharging?.isCharging, currentCharging?.status]); // Thêm dependencies
 
   // Tính toán dữ liệu thống kê từ lịch sử sạc thực tế
   const monthlyCharges = countMonthlyCharges(chargingHistory);

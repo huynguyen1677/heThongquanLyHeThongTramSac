@@ -1,15 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, where, limit, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import './ChargingSessionsList.css';
+import './ChargingSessionsList.css'; 
 
 const ChargingSessionsList = ({ ownerId }) => {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [groupByStation, setGroupByStation] = useState(true);
+    const [viewMode, setViewMode] = React.useState('list');
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const itemsPerPage = 10; // 'list', 'grid', 'table'
   const [selectedStation, setSelectedStation] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('startTime');
+  const [sortOrder, setSortOrder] = useState('desc');
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     const fetchSessions = async () => {
@@ -18,13 +23,11 @@ const ChargingSessionsList = ({ ownerId }) => {
       try {
         setLoading(true);
         
-        // Query Firestore directly for charging sessions by ownerId
-        // Remove orderBy to avoid composite index requirement for now
         const sessionsRef = collection(db, 'chargingSessions');
         const q = query(
           sessionsRef,
           where('ownerId', '==', ownerId),
-          limit(100)
+          limit(200)
         );
         
         const querySnapshot = await getDocs(q);
@@ -33,17 +36,10 @@ const ChargingSessionsList = ({ ownerId }) => {
           ...doc.data()
         }));
         
-        // Sort manually after fetching
-        const sortedSessions = sessionsData.sort((a, b) => {
-          const dateA = new Date(a.startTime);
-          const dateB = new Date(b.startTime);
-          return dateB - dateA; // Newest first
-        });
-        
-        setSessions(sortedSessions);
+        setSessions(sessionsData);
       } catch (err) {
-        console.error('Error fetching charging sessions from Firestore:', err);
-        setError('Không thể tải dữ liệu phiên sạc từ Firestore');
+        console.error('Error fetching charging sessions:', err);
+        setError('Không thể tải dữ liệu phiên sạc');
       } finally {
         setLoading(false);
       }
@@ -52,42 +48,92 @@ const ChargingSessionsList = ({ ownerId }) => {
     fetchSessions();
   }, [ownerId]);
 
-  // Group sessions by station
-  const groupedSessions = React.useMemo(() => {
-    if (!groupByStation) return { 'all': sessions };
-    
-    return sessions.reduce((groups, session) => {
-      const stationKey = session.stationId || 'unknown';
-      if (!groups[stationKey]) {
-        groups[stationKey] = [];
-      }
-      groups[stationKey].push(session);
-      return groups;
-    }, {});
-  }, [sessions, groupByStation]);
-
-  // Get unique stations for filter
+  // Get unique stations and statuses for filters
   const stations = React.useMemo(() => {
     const stationSet = new Set(sessions.map(s => s.stationId).filter(Boolean));
     return Array.from(stationSet);
   }, [sessions]);
 
-  // Filter sessions based on selected station
-  const filteredSessions = React.useMemo(() => {
-    if (selectedStation === 'all') return sessions;
-    return sessions.filter(s => s.stationId === selectedStation);
-  }, [sessions, selectedStation]);
+  const statuses = React.useMemo(() => {
+    const statusSet = new Set(sessions.map(s => s.status).filter(Boolean));
+    return Array.from(statusSet);
+  }, [sessions]);
+
+  // Filter and sort sessions
+  const filteredAndSortedSessions = React.useMemo(() => {
+    let filtered = sessions.filter(session => {
+      const matchesStation = selectedStation === 'all' || session.stationId === selectedStation;
+      const matchesStatus = statusFilter === 'all' || session.status === statusFilter;
+      const matchesSearch = !searchTerm || 
+        session.userId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        session.stationId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        session.id?.toString().includes(searchTerm);
+      
+      return matchesStation && matchesStatus && matchesSearch;
+    });
+
+    // Sort sessions
+    filtered.sort((a, b) => {
+      let aValue = a[sortBy];
+      let bValue = b[sortBy];
+
+      if (sortBy === 'startTime' || sortBy === 'stopTime') {
+        aValue = new Date(aValue);
+        bValue = new Date(bValue);
+      }
+
+      if (sortOrder === 'asc') {
+        return aValue > bValue ? 1 : -1;
+      } else {
+        return aValue < bValue ? 1 : -1;
+      }
+    });
+
+    return filtered;
+  }, [sessions, selectedStation, statusFilter, searchTerm, sortBy, sortOrder]);
+
+  // Statistics
+  const stats = React.useMemo(() => {
+    const totalSessions = filteredAndSortedSessions.length;
+    const completedSessions = filteredAndSortedSessions.filter(s => 
+      s.status === 'Completed' || s.status === 'completed'
+    ).length;
+    const totalEnergy = filteredAndSortedSessions.reduce((sum, s) => 
+      sum + (s.energyConsumed || 0), 0
+    );
+    const totalRevenue = filteredAndSortedSessions.reduce((sum, s) => 
+      sum + (s.estimatedCost || 0), 0
+    );
+
+    return { totalSessions, completedSessions, totalEnergy, totalRevenue };
+  }, [filteredAndSortedSessions]);
+
+  // Pagination
+  const totalPages = Math.ceil(filteredAndSortedSessions.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const currentSessions = filteredAndSortedSessions.slice(startIndex, startIndex + itemsPerPage);
+
+  // Reset to first page when filters change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedStation, statusFilter, searchTerm, sortBy, sortOrder]);
 
   const formatDuration = (seconds) => {
     if (!seconds) return 'N/A';
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
-    return `${hours}h ${minutes}m`;
+    return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
   };
 
   const formatDateTime = (timestamp) => {
     if (!timestamp) return 'N/A';
-    return new Date(timestamp).toLocaleString('vi-VN');
+    return new Date(timestamp).toLocaleString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   const formatEnergy = (wh) => {
@@ -95,171 +141,244 @@ const ChargingSessionsList = ({ ownerId }) => {
     return `${(wh / 1000).toFixed(2)} kWh`;
   };
 
+  const formatSessionId = (id) => {
+    if (!id) return 'N/A';
+    const idStr = String(id);
+    return idStr.length > 8 ? idStr.slice(-8) : idStr;
+  };
+
   const formatCurrency = (amount) => {
-    if (!amount) return '0 ₫';
-    return `${amount.toLocaleString('vi-VN')} ₫`;
+    if (!amount) return '0₫';
+    return `${amount.toLocaleString('vi-VN')}₫`;
+  };
+
+  const getStatusColor = (status) => {
+    switch (status?.toLowerCase()) {
+      case 'completed':
+      case 'finished':
+        return 'status-success';
+      case 'charging':
+      case 'active':
+        return 'status-charging';
+      case 'failed':
+      case 'error':
+      case 'faulted':
+        return 'status-error';
+      case 'stopped':
+      case 'suspended':
+      case 'suspendedEV':
+      case 'suspendedEVSE':
+        return 'status-warning';
+      default:
+        return 'status-default';
+    }
+  };
+
+  const getStatusIcon = (status) => {
+    switch (status?.toLowerCase()) {
+      case 'completed':
+      case 'finished':
+        return '✅';
+      case 'charging':
+      case 'active':
+        return '🔋';
+      case 'failed':
+      case 'error':
+      case 'faulted':
+        return '❌';
+      case 'stopped':
+      case 'suspended':
+      case 'suspendedEV':
+      case 'suspendedEVSE':
+        return '⏸️';
+      case 'preparing':
+        return '🔄';
+      default:
+        return '⚪';
+    }
   };
 
   const getStatusBadge = (status) => {
     const statusConfig = {
-      completed: { className: 'status-completed', text: 'Hoàn thành' },
-      cancelled: { className: 'status-cancelled', text: 'Đã hủy' },
-      error: { className: 'status-error', text: 'Lỗi' },
-      active: { className: 'status-active', text: 'Đang sạc' }
+      'Completed': { bg: 'bg-green-100', text: 'text-green-800', label: 'Hoàn thành' },
+      'completed': { bg: 'bg-green-100', text: 'text-green-800', label: 'Hoàn thành' },
+      'Charging': { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Đang sạc' },
+      'Preparing': { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Chuẩn bị' },
+      'SuspendedEV': { bg: 'bg-purple-100', text: 'text-purple-800', label: 'Tạm dừng' },
+      'SuspendedEVSE': { bg: 'bg-orange-100', text: 'text-orange-800', label: 'Trạm dừng' },
+      'Finishing': { bg: 'bg-indigo-100', text: 'text-indigo-800', label: 'Kết thúc' },
+      'Faulted': { bg: 'bg-red-100', text: 'text-red-800', label: 'Lỗi' },
+      'Unavailable': { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Không sẵn sàng' }
     };
     
-    const config = statusConfig[status] || { className: 'status-active', text: status };
+    const config = statusConfig[status] || { bg: 'bg-gray-100', text: 'text-gray-800', label: status };
     
     return (
-      <span className={`status-badge ${config.className}`}>
-        {config.text}
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.bg} ${config.text}`}>
+        {config.label}
       </span>
-    );
-  };
-
-  const getStatusText = (status) => {
-    const statusTexts = {
-      completed: 'Hoàn thành',
-      cancelled: 'Đã hủy', 
-      error: 'Lỗi',
-      active: 'Đang sạc'
-    };
-    return statusTexts[status] || status;
-  };
-
-  const renderSessionItem = (session) => {
-    return (
-      <div key={session.id} className="session-item">
-        <div className="session-main">
-          <div className="session-info">
-            <div className="session-title">
-              <div className="connector-badge">
-                Cổng {session.connectorId}
-              </div>
-              <div className="session-user">
-                👤 {session.userId}
-              </div>
-            </div>
-            
-            <div className="session-datetime">
-              🕐 {formatDateTime(session.startTime)}
-              {session.stopTime && ` → ${formatDateTime(session.stopTime)}`}
-            </div>
-
-            <div className="session-stats">
-              <div className="stat-item">
-                <div className="stat-label">Thời gian</div>
-                <div className="stat-value">{formatDuration(session.duration)}</div>
-              </div>
-              <div className="stat-item">
-                <div className="stat-label">Năng lượng</div>
-                <div className="stat-value">{formatEnergy(session.energyConsumed)}</div>
-              </div>
-              <div className="stat-item">
-                <div className="stat-label">Meter Start</div>
-                <div className="stat-value">{formatEnergy(session.meterStart || 0)}</div>
-              </div>
-              <div className="stat-item">
-                <div className="stat-label">Meter Stop</div>
-                <div className="stat-value">{formatEnergy(session.meterStop || 0)}</div>
-              </div>
-            </div>
-
-            {session.reason && (
-              <div className="session-address">
-                📝 Lý do: {session.reason}
-              </div>
-            )}
-
-            {session.stationInfo?.address && (
-              <div className="session-address">
-                📍 {session.stationInfo.address}
-              </div>
-            )}
-          </div>
-
-          <div className="session-status">
-            {getStatusBadge(session.status)}
-            <div className="cost-highlight">
-              💰 {formatCurrency(session.estimatedCost)}
-            </div>
-          </div>
-        </div>
-      </div>
     );
   };
 
   if (loading) {
     return (
-      <div className="charging-sessions-container">
-        <div className="loading-container">
-          <div className="loading-spinner"></div>
-          <p>Đang tải dữ liệu phiên sạc...</p>
-        </div>
+      <div style={{ padding: '2rem', textAlign: 'center' }}>
+        <div className="loading" style={{ width: '40px', height: '40px' }}></div>
+        <p style={{ marginTop: '1rem', color: '#6b7280' }}>Đang tải dữ liệu phiên sạc...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="charging-sessions-container">
-        <div className="error-container">
-          <div className="error-icon">⚠️</div>
-          <p>{error}</p>
-          <button 
-            className="retry-button"
-            onClick={() => window.location.reload()}
-          >
-            Thử lại
-          </button>
+      <div style={{ padding: '2rem', textAlign: 'center' }}>
+        <div style={{ color: '#dc2626', marginBottom: '1rem' }}>
+          <span style={{ fontSize: '2rem' }}>⚠️</span>
         </div>
+        <p style={{ color: '#dc2626', fontWeight: '500' }}>{error}</p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="btn btn-primary"
+          style={{ marginTop: '1rem' }}
+        >
+          Thử lại
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header with title and controls */}
-      <div className="bg-white p-6 rounded-lg shadow">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">Lịch sử phiên sạc</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              Tổng cộng: {sessions.length} phiên • {stations.length} trạm sạc
-            </p>
+    <div style={{ padding: '2rem' }}>
+      {/* Header */}
+      <div style={{ marginBottom: '2rem' }}>
+        <h2 style={{ fontSize: '1.5rem', fontWeight: '600', color: '#1f2937', marginBottom: '0.5rem' }}>
+          ⚡ Lịch sử phiên sạc
+        </h2>
+        <p style={{ color: '#6b7280' }}>
+          Quản lý và theo dõi tất cả phiên sạc của bạn
+        </p>
+        
+        {/* Statistics */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginTop: '1.5rem' }}>
+          <div className="card">
+            <div className="card-body" style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#1f2937' }}>{stats.totalSessions}</div>
+              <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>Tổng phiên</div>
+            </div>
           </div>
-          
-          <div className="flex flex-col sm:flex-row gap-3">
-            {/* Station Filter */}
+          <div className="card">
+            <div className="card-body" style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#1f2937' }}>{stats.completedSessions}</div>
+              <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>Hoàn thành</div>
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-body" style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#1f2937' }}>{formatEnergy(stats.totalEnergy)}</div>
+              <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>Tổng năng lượng</div>
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-body" style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#2563eb' }}>{formatCurrency(stats.totalRevenue)}</div>
+              <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>Tổng doanh thu</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <div className="card-body">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center' }}>
+            {/* Search */}
+            <div style={{ position: 'relative', minWidth: '300px', flex: '1' }}>
+              <input
+                type="text"
+                placeholder="Tìm kiếm theo User ID, Station ID..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{ paddingLeft: '2.5rem' }}
+              />
+              <div style={{ 
+                position: 'absolute', 
+                left: '0.75rem', 
+                top: '50%', 
+                transform: 'translateY(-50%)',
+                color: '#6b7280'
+              }}>
+                🔍
+              </div>
+            </div>
+
+            {/* Filters */}
             <select
               value={selectedStation}
               onChange={(e) => setSelectedStation(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="all">Tất cả trạm</option>
+              <option value="all">🏢 Tất cả trạm</option>
               {stations.map(stationId => (
-                <option key={stationId} value={stationId}>
-                  {stationId}
-                </option>
+                <option key={stationId} value={stationId}>{stationId}</option>
               ))}
             </select>
-            
-            {/* Group Toggle */}
-            <button
-              onClick={() => setGroupByStation(!groupByStation)}
-              className={`px-4 py-2 rounded-md transition-colors ${
-                groupByStation 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
+
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
             >
-              {groupByStation ? '📊 Theo trạm' : '📋 Danh sách'}
-            </button>
-            
-            {/* Refresh Button */}
+              <option value="all">📊 Tất cả trạng thái</option>
+              {statuses.map(status => (
+                <option key={status} value={status}>{status}</option>
+              ))}
+            </select>
+
+            <select
+              value={`${sortBy}-${sortOrder}`}
+              onChange={(e) => {
+                const [field, order] = e.target.value.split('-');
+                setSortBy(field);
+                setSortOrder(order);
+              }}
+            >
+              <option value="startTime-desc">🕐 Mới nhất</option>
+              <option value="startTime-asc">🕐 Cũ nhất</option>
+              <option value="energyConsumed-desc">⚡ Năng lượng cao → thấp</option>
+              <option value="energyConsumed-asc">⚡ Năng lượng thấp → cao</option>
+              <option value="estimatedCost-desc">💰 Chi phí cao → thấp</option>
+              <option value="estimatedCost-asc">💰 Chi phí thấp → cao</option>
+            </select>
+
+            {/* View Mode Toggle */}
+            <div style={{ display: 'flex', border: '1px solid #d1d5db', borderRadius: '6px', overflow: 'hidden' }}>
+              <button
+                onClick={() => setViewMode('list')}
+                style={{
+                  padding: '0.5rem 0.75rem',
+                  backgroundColor: viewMode === 'list' ? '#3b82f6' : 'white',
+                  color: viewMode === 'list' ? 'white' : '#374151',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                📋
+              </button>
+              <button
+                onClick={() => setViewMode('grid')}
+                style={{
+                  padding: '0.5rem 0.75rem',
+                  backgroundColor: viewMode === 'grid' ? '#3b82f6' : 'white',
+                  color: viewMode === 'grid' ? 'white' : '#374151',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                �
+              </button>
+            </div>
+
             <button
               onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+              className="btn btn-outline"
             >
               🔄 Làm mới
             </button>
@@ -268,160 +387,187 @@ const ChargingSessionsList = ({ ownerId }) => {
       </div>
 
       {/* Content */}
-      {sessions.length === 0 ? (
-        <div className="bg-white rounded-lg shadow p-12 text-center">
-          <div className="text-6xl mb-4">🔌</div>
-          <p className="text-gray-500 text-lg">Chưa có phiên sạc nào</p>
-          <p className="text-gray-400 text-sm mt-2">Các phiên sạc sẽ xuất hiện ở đây khi có người dùng sạc xe</p>
-        </div>
-      ) : groupByStation ? (
-        /* Group by Station View */
-        <div className="space-y-6">
-          {Object.entries(groupedSessions).map(([stationId, stationSessions]) => (
-            <div key={stationId} className="bg-white rounded-lg shadow overflow-hidden">
-              <div className="bg-gray-50 px-6 py-4 border-b">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <span className="text-blue-600 font-bold">🏢</span>
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        {stationSessions[0]?.stationInfo?.stationName || stationId}
-                      </h3>
-                      <p className="text-sm text-gray-500">
-                        {stationSessions[0]?.stationInfo?.address || 'Địa chỉ chưa cập nhật'}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-lg font-bold text-blue-600">{stationSessions.length}</p>
-                    <p className="text-xs text-gray-500">phiên sạc</p>
-                  </div>
-                </div>
-                
-                {/* Station Summary */}
-                <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div className="bg-white p-3 rounded-lg">
-                    <p className="text-gray-500">Tổng năng lượng</p>
-                    <p className="font-semibold text-green-600">
-                      {formatEnergy(stationSessions.reduce((sum, s) => sum + (s.energyConsumed || 0), 0))}
-                    </p>
-                  </div>
-                  <div className="bg-white p-3 rounded-lg">
-                    <p className="text-gray-500">Tổng doanh thu</p>
-                    <p className="font-semibold text-blue-600">
-                      {formatCurrency(stationSessions.reduce((sum, s) => sum + (s.estimatedCost || 0), 0))}
-                    </p>
-                  </div>
-                  <div className="bg-white p-3 rounded-lg">
-                    <p className="text-gray-500">Phiên gần nhất</p>
-                    <p className="font-semibold">
-                      {formatDateTime(stationSessions[0]?.startTime)}
-                    </p>
-                  </div>
-                  <div className="bg-white p-3 rounded-lg">
-                    <p className="text-gray-500">Cổng sạc</p>
-                    <p className="font-semibold">
-                      {new Set(stationSessions.map(s => s.connectorId)).size} cổng
-                    </p>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Sessions List for this station */}
-              <div className="divide-y divide-gray-200">
-                {stationSessions.slice(0, 5).map((session) => (
-                  <SessionItem key={session.id} session={session} />
-                ))}
-                {stationSessions.length > 5 && (
-                  <div className="px-6 py-4 bg-gray-50 text-center">
-                    <button 
-                      className="text-blue-600 hover:text-blue-700 font-medium"
-                      onClick={() => setSelectedStation(stationId)}
-                    >
-                      Xem thêm {stationSessions.length - 5} phiên sạc →
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
+      {filteredAndSortedSessions.length === 0 ? (
+        <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
+          <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>🔌</div>
+          <h3 style={{ fontSize: '1.25rem', fontWeight: '600', color: '#374151', marginBottom: '0.5rem' }}>
+            Không tìm thấy phiên sạc nào
+          </h3>
+          <p style={{ color: '#6b7280' }}>
+            {sessions.length === 0 
+              ? 'Chưa có phiên sạc nào. Các phiên sạc sẽ xuất hiện ở đây khi có người dùng sạc xe.'
+              : 'Thử thay đổi bộ lọc để xem thêm kết quả.'
+            }
+          </p>
         </div>
       ) : (
-        /* List View */
-        <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-          <div className="divide-y divide-gray-200">
-            {filteredSessions.map((session) => (
-              <SessionItem key={session.id} session={session} showStation={true} />
-            ))}
-          </div>
+        <>
+          {viewMode === 'list' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {currentSessions.map((session) => (
+                <div key={session.id} className="card">
+                  <div className="card-body">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <span className={`status-badge ${getStatusColor(session.status)}`}>
+                          {getStatusIcon(session.status)} {session.status}
+                        </span>
+                        <div style={{ fontSize: '1.125rem', fontWeight: '600', color: '#1f2937' }}>
+                          Phiên #{formatSessionId(session.id)}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: '1.125rem', fontWeight: '700', color: '#2563eb' }}>
+                        {formatCurrency(session.estimatedCost)}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                      <div>
+                        <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>👤 Người dùng</span>
+                        <div style={{ fontWeight: '500' }}>{session.userId}</div>
+                      </div>
+                      <div>
+                        <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>🏢 Trạm</span>
+                        <div style={{ fontWeight: '500' }}>{session.stationId}</div>
+                      </div>
+                      <div>
+                        <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>🔌 Cổng sạc</span>
+                        <div style={{ fontWeight: '500' }}>{session.connectorId}</div>
+                      </div>
+                      <div>
+                        <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>⚡ Năng lượng</span>
+                        <div style={{ fontWeight: '700', color: '#059669' }}>{formatEnergy(session.energyConsumed)}</div>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #e5e7eb' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', color: '#6b7280' }}>
+                        <div>
+                          <span style={{ fontWeight: '500' }}>🕐 Bắt đầu:</span> {formatDateTime(session.startTime)}
+                        </div>
+                        {session.endTime && (
+                          <div>
+                            <span style={{ fontWeight: '500' }}>🏁 Kết thúc:</span> {formatDateTime(session.endTime)}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {viewMode === 'grid' && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
+              {currentSessions.map((session) => (
+                <div key={session.id} className="card">
+                  <div className="card-body">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                      <span className={`status-badge ${getStatusColor(session.status)}`}>
+                        {getStatusIcon(session.status)} {session.status}
+                      </span>
+                      <div style={{ fontSize: '1.125rem', fontWeight: '700', color: '#2563eb' }}>
+                        {formatCurrency(session.estimatedCost)}
+                      </div>
+                    </div>
+
+                    <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+                      <div style={{ fontSize: '1.125rem', fontWeight: '600', color: '#1f2937', marginBottom: '0.5rem' }}>
+                        Phiên #{formatSessionId(session.id)}
+                      </div>
+                      <div style={{ 
+                        display: 'inline-flex',
+                        backgroundColor: '#ecfdf5',
+                        color: '#065f46',
+                        padding: '0.75rem 1rem',
+                        borderRadius: '50%',
+                        minWidth: '80px',
+                        minHeight: '80px',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        <div style={{ fontWeight: '700', fontSize: '1.25rem' }}>{formatEnergy(session.energyConsumed)}</div>
+                        <div style={{ fontSize: '0.75rem' }}>Năng lượng</div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>👤 Người dùng</span>
+                        <span style={{ fontWeight: '500' }}>{session.userId}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>🏢 Trạm</span>
+                        <span style={{ fontWeight: '500' }}>{session.stationId}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>🔌 Cổng sạc</span>
+                        <span style={{ fontWeight: '500' }}>{session.connectorId}</span>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #e5e7eb', textAlign: 'center', fontSize: '0.875rem', color: '#6b7280' }}>
+                      <div>🕐 {formatDateTime(session.startTime)}</div>
+                      {session.endTime && (
+                        <div>🏁 {formatDateTime(session.endTime)}</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          gap: '0.5rem',
+          marginTop: '2rem'
+        }}>
+          <button
+            onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+            disabled={currentPage === 1}
+            style={{
+              padding: '0.5rem 1rem',
+              backgroundColor: currentPage === 1 ? '#f3f4f6' : '#3b82f6',
+              color: currentPage === 1 ? '#9ca3af' : 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: currentPage === 1 ? 'not-allowed' : 'pointer'
+            }}
+          >
+            ← Trước
+          </button>
+          
+          <span style={{ padding: '0.5rem 1rem', fontSize: '0.875rem', color: '#6b7280' }}>
+            Trang {currentPage} / {totalPages}
+          </span>
+          
+          <button
+            onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+            disabled={currentPage === totalPages}
+            style={{
+              padding: '0.5rem 1rem',
+              backgroundColor: currentPage === totalPages ? '#f3f4f6' : '#3b82f6',
+              color: currentPage === totalPages ? '#9ca3af' : 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: currentPage === totalPages ? 'not-allowed' : 'pointer'
+            }}
+          >
+            Sau →
+          </button>
         </div>
       )}
     </div>
   );
-
-  // Session Item Component
-  function SessionItem({ session, showStation = false }) {
-    return (
-      <div className="px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="flex-shrink-0">
-                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <span className="text-blue-600 font-semibold text-sm">
-                      {session.connectorId}
-                    </span>
-                  </div>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-900 truncate">
-                    {showStation && (session.stationInfo?.stationName || session.stationId)}
-                    {!showStation && `Cổng ${session.connectorId}`}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    User: {session.userId} • Bắt đầu: {formatDateTime(session.startTime)}
-                    {showStation && ` • ${session.stationId}`}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-2">
-                {getStatusBadge(session.status)}
-              </div>
-            </div>
-            
-            <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-              <div>
-                <p className="text-gray-500">Thời gian</p>
-                <p className="font-medium">{formatDuration(session.duration)}</p>
-              </div>
-              <div>
-                <p className="text-gray-500">Năng lượng</p>
-                <p className="font-medium">{formatEnergy(session.energyConsumed)}</p>
-              </div>
-              <div>
-                <p className="text-gray-500">Chi phí</p>
-                <p className="font-medium text-green-600">{formatCurrency(session.estimatedCost)}</p>
-              </div>
-              <div>
-                <p className="text-gray-500">Kết thúc</p>
-                <p className="font-medium">{formatDateTime(session.stopTime)}</p>
-              </div>
-            </div>
-
-            {session.reason && (
-              <div className="mt-2">
-                <span className="text-sm text-gray-500">Lý do dừng: </span>
-                <span className="text-sm text-gray-700">{session.reason}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
 };
 
 export default ChargingSessionsList;

@@ -3,6 +3,7 @@ import LoginForm from './components/LoginForm';
 import Header from './components/Header';
 import StationList from './components/StationList';
 import ChargingSessionsList from './components/ChargingSessionsList';
+import Dashboard from './components/Dashboard';
 import SyncButton from './components/SyncButton';
 import RealtimeService from './services/realtime';
 import AuthService from './services/auth';
@@ -111,6 +112,22 @@ function App() {
             >
               Lịch sử phiên sạc
             </button>
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              style={{
+                padding: '0.75rem 0',
+                color: activeTab === 'dashboard' ? '#2563eb' : '#6b7280',
+                borderBottom: activeTab === 'dashboard' ? '2px solid #2563eb' : '2px solid transparent',
+                borderTop: 'none',
+                borderLeft: 'none',
+                borderRight: 'none',
+                background: 'none',
+                cursor: 'pointer',
+                fontWeight: activeTab === 'dashboard' ? '600' : '400'
+              }}
+            >
+              📊 Thống kê & Dashboard
+            </button>
           </nav>
         </div>
 
@@ -127,6 +144,9 @@ function App() {
           )}
           {activeTab === 'sessions' && (
             <ChargingSessionsList ownerId={currentUser.ownerId} />
+          )}
+          {activeTab === 'dashboard' && (
+            <Dashboard ownerId={currentUser.ownerId} />
           )}
         </main>
       </div>
