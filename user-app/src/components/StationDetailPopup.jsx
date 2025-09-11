@@ -324,7 +324,7 @@ function StationDetailPopup({ station, userPos, onClose }) {
                   e.target.style.boxShadow = "none";
                 }}
               >
-                🧭 Chỉ đường
+                Chỉ đường
               </a>
             )}
             <button 

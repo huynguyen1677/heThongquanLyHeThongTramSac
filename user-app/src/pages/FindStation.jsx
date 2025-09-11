@@ -1,6 +1,10 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useCharging } from "../contexts/ChargingContext";
-import { filterStationsByKeyword, sortStationsByDistance } from "../utils/stationUtils";
+import { 
+  smartSearchStations, 
+  getSearchSuggestions, 
+  sortStationsByDistance 
+} from "../utils/stationUtils";
 import StationMap from "../components/StationMap";
 import StationDetailPopup from "../components/StationDetailPopup";
 import "../styles/find-station-page.css";
@@ -15,6 +19,7 @@ function FindStation() {
   const [sortBy, setSortBy] = useState("distance");
   const [viewMode, setViewMode] = useState("map"); // map, list, grid
   const [selectedStation, setSelectedStation] = useState(null);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   // Lấy vị trí người dùng
   useEffect(() => {
@@ -44,9 +49,17 @@ function FindStation() {
     }
   }, []);
 
-  // Lọc và sắp xếp stations
+  // Gợi ý tìm kiếm
+  const searchSuggestions = useMemo(() => {
+    if (search.length < 2) return [];
+    return getSearchSuggestions(stations || [], search);
+  }, [stations, search]);
+
+  // Lọc và sắp xếp stations với tìm kiếm thông minh
   const processedStations = useMemo(() => {
-    let filtered = filterStationsByKeyword(stations, search);
+    let filtered = search 
+      ? smartSearchStations(stations || [], search)
+      : stations || [];
     
     // Lọc theo trạng thái
     if (statusFilter !== "all") {
@@ -82,6 +95,12 @@ function FindStation() {
           if (!a.online && b.online) return 1;
           return 0;
         });
+        break;
+      case "relevance":
+        // Nếu có search, sắp xếp theo điểm tìm kiếm
+        if (search) {
+          sorted = filtered.sort((a, b) => (b.searchScore || 0) - (a.searchScore || 0));
+        }
         break;
       default:
         sorted = filtered;
@@ -125,11 +144,23 @@ function FindStation() {
     setSelectedStation(station);
   };
 
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setSearch(value);
+    setShowSuggestions(value.length >= 2);
+  };
+
+  const handleSuggestionClick = (suggestion) => {
+    setSearch(suggestion);
+    setShowSuggestions(false);
+  };
+
   const resetFilters = () => {
     setSearch("");
     setStatusFilter("all");
     setConnectorFilter("all");
     setSortBy("distance");
+    setShowSuggestions(false);
   };
 
   return (
@@ -252,25 +283,46 @@ function FindStation() {
         </div>
 
         <div className="search-filters-content">
-          {/* Search Bar */}
+          {/* Enhanced Search Bar */}
           <div className="search-bar">
             <div className="search-input-wrapper">
               <i className="fas fa-search search-icon"></i>
               <input
                 type="text"
-                placeholder="Tìm theo tên trạm hoặc địa chỉ..."
+                placeholder="Tìm theo tên trạm, địa chỉ, quận/huyện, tỉnh/thành..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={handleSearchChange}
+                onFocus={() => setShowSuggestions(search.length >= 2)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                 className="search-input"
               />
               {search && (
                 <button
-                  onClick={() => setSearch("")}
+                  onClick={() => {
+                    setSearch("");
+                    setShowSuggestions(false);
+                  }}
                   className="search-clear"
                   title="Xóa tìm kiếm"
                 >
                   <i className="fas fa-times"></i>
                 </button>
+              )}
+              
+              {/* Search Suggestions */}
+              {showSuggestions && searchSuggestions.length > 0 && (
+                <div className="search-suggestions">
+                  {searchSuggestions.map((suggestion, index) => (
+                    <div
+                      key={index}
+                      className="search-suggestion"
+                      onClick={() => handleSuggestionClick(suggestion)}
+                    >
+                      <i className="fas fa-search"></i>
+                      <span>{suggestion}</span>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>
@@ -321,6 +373,7 @@ function FindStation() {
                 className="filter-select"
               >
                 <option value="distance">Khoảng cách</option>
+                <option value="relevance">Độ liên quan</option>
                 <option value="name">Tên trạm</option>
                 <option value="status">Trạng thái</option>
               </select>

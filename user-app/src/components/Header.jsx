@@ -29,14 +29,8 @@ const Header = () => {
           {/* Connection Status */}
           <div className="connection-status">
             <div className="status-dot"></div>
-            <span>Đang kết nối</span>
+            <span>Đã kết nối</span>
           </div>
-          
-          {/* Notifications */}
-          <button className="notification-btn">
-            <i className="fas fa-bell"></i>
-            <span className="notification-badge">3</span>
-          </button>
           
           {/* User Avatar */}
           {user ? (

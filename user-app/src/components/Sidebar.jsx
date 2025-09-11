@@ -2,11 +2,32 @@ import React from "react";
 import { NavLink } from "react-router-dom";
 import "../styles/sidebar-clean.css";
 
-function Sidebar() {
+function Sidebar({ onClose }) {
+  const handleLinkClick = () => {
+    // Đóng sidebar trên mobile khi click vào link
+    if (onClose) onClose();
+  };
+
   return (
     <div className="sidebar">
-      {/* Logo */}
-      <div className="sidebar-logo">
+      {/* Mobile Close Button */}
+      <div className="mobile-sidebar-header">
+        <div className="mobile-sidebar-logo">
+          <div className="logo-icon">
+            <i className="fas fa-charging-station"></i>
+          </div>
+          <div className="logo-text">
+            <h1>EV Station</h1>
+            <p>User App</p>
+          </div>
+        </div>
+        <button className="mobile-close-btn" onClick={onClose}>
+          <i className="fas fa-times"></i>
+        </button>
+      </div>
+
+      {/* Desktop Logo */}
+      <div className="sidebar-logo desktop-only">
         <div className="logo-container">
           <div className="logo-icon">
             <i className="fas fa-charging-station"></i>
@@ -26,6 +47,7 @@ function Sidebar() {
             `sidebar-item ${isActive ? 'active' : ''}`
           }
           end
+          onClick={handleLinkClick}
         >
           <div className="nav-content">
             <i className="fas fa-home"></i>
@@ -38,6 +60,7 @@ function Sidebar() {
           className={({ isActive }) => 
             `sidebar-item ${isActive ? 'active' : ''}`
           }
+          onClick={handleLinkClick}
         >
           <div className="nav-content">
             <i className="fas fa-history"></i>
@@ -50,6 +73,7 @@ function Sidebar() {
           className={({ isActive }) => 
             `sidebar-item ${isActive ? 'active' : ''}`
           }
+          onClick={handleLinkClick}
         >
           <div className="nav-content">
             <i className="fas fa-map-marker-alt"></i>
@@ -62,6 +86,7 @@ function Sidebar() {
           className={({ isActive }) => 
             `sidebar-item ${isActive ? 'active' : ''}`
           }
+          onClick={handleLinkClick}
         >
           <div className="nav-content">
             <i className="fas fa-wallet"></i>
@@ -74,6 +99,7 @@ function Sidebar() {
           className={({ isActive }) => 
             `sidebar-item ${isActive ? 'active' : ''}`
           }
+          onClick={handleLinkClick}
         >
           <div className="nav-content">
             <i className="fas fa-user"></i>
@@ -86,6 +112,7 @@ function Sidebar() {
           className={({ isActive }) => 
             `sidebar-item ${isActive ? 'active' : ''}`
           }
+          onClick={handleLinkClick}
         >
           <div className="nav-content">
             <i className="fas fa-cog"></i>

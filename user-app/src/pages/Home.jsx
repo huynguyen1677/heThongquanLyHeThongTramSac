@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import "../styles/home-dashboard.css";
 import StationMap from "../components/StationMap";
 import { useCharging } from "../contexts/ChargingContext";
@@ -9,13 +9,15 @@ import useChargingHistory from "../contexts/useChargingHistory";
 import { listenUserCharging } from "../services/realtime"; // Import hàm mới
 import ChargingCompleteModal from "../components/ChargingCompleteModal";
 import { es } from "date-fns/locale";
+import { sortStationsByDistance } from "../utils/stationUtils";
+import { formatEnergy } from "../utils/formatUtils";
 
 function Home() {
   const { stations, stationsLoading: loading, stationsError: error, confirmationRequest, respondConfirmation } = useCharging();
   const { user } = useAuth();
   const userId = user?.userId || user?.uid;
   const { chargingHistory, loading: historyLoading } = useChargingHistory(userId);
-
+  const [userPos, setUserPos] = useState(null);
   const [selectedStation, setSelectedStation] = useState(null);
   const [currentCharging, setCurrentCharging] = useState(null);
   const [previousCharging, setPreviousCharging] = useState(null); // Theo dõi phiên sạc trước đó
@@ -131,11 +133,29 @@ function Home() {
 
   const userData = {
     name: user?.displayName || user?.name || "Người dùng",
-    walletBalance: user?.walletBalance?.toLocaleString('vi-VN') + "₫" || "0₫",
+    walletBalance: user?.walletBalance !== undefined
+    ? Math.floor(user.walletBalance).toLocaleString('vi-VN') + "₫"
+    : "0₫",
     monthlyCharges: monthlyCharges,
-    totalKWh: totalKWh + " kWh",
+    totalKWh: formatEnergy(totalKWh),
     co2Saved: co2Saved.toFixed(1) + " kg"
   };
+
+  // Tính 3 trạm sạc gần nhất
+  const nearestStations = useMemo(() => {
+    if (!userPos || !stations || stations.length === 0) return [];
+    
+    // Lọc stations có tọa độ hợp lệ và đang hoạt động
+    const validStations = stations.filter(
+      s => typeof s.latitude === "number" && 
+          typeof s.longitude === "number" &&
+          s.online // Chỉ lấy trạm đang hoạt động
+    );
+
+    // Sắp xếp theo khoảng cách và lấy 3 trạm đầu tiên
+    const sortedByDistance = sortStationsByDistance(validStations, userPos);
+    return sortedByDistance.slice(0, 3);
+  }, [stations, userPos]);
 
   // Lọc ra các trạm có đủ latitude và longitude
   const validStations = stations.filter(
@@ -160,6 +180,30 @@ function Home() {
     setShowChargingComplete(false);
     setCompletedSession(null);
   };
+
+  // Thêm useEffect này vào Home component, sau các useEffect hiện có:
+  useEffect(() => {
+    // Lấy vị trí người dùng
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setUserPos({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          });
+        },
+        (error) => {
+          console.error("Geolocation error:", error);
+          setUserPos(null);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 300000 // 5 minutes
+        }
+      );
+    }
+  }, []); // Chạy 1 lần khi component mount
 
   return (
     <div className="dashboard-container">
@@ -285,13 +329,105 @@ function Home() {
         </div>
       )}
 
+      {/* 3 Trạm sạc gần nhất */}
+      {nearestStations.length > 0 && (
+        <div className="nearest-stations-section">
+          <div className="section-header">
+            <h3 className="section-title">
+              <i className="fas fa-map-marker-alt"></i>
+              Trạm sạc gần nhất
+            </h3>
+            <button 
+              className="view-all-btn"
+              onClick={() => window.location.href = '/stations'}
+            >
+              Xem tất cả
+              <i className="fas fa-chevron-right"></i>
+            </button>
+          </div>
+          
+          <div className="nearest-stations-grid">
+            {nearestStations.map((station, index) => (
+              <div 
+                key={station.id || station.stationId} 
+                className="nearest-station-card"
+                onClick={() => setSelectedStation(station)}
+              >
+                <div className="station-rank">#{index + 1}</div>
+                
+                <div className="station-info">
+                  <div className="station-header">
+                    <div className="station-icon">
+                      <div className={`status-dot ${station.online ? 'online' : 'offline'}`}></div>
+                      <i className="fas fa-charging-station"></i>
+                    </div>
+                    <div className="station-details">
+                      <h4 className="station-name">
+                        {station.name || station.stationName || 'Trạm sạc'}
+                      </h4>
+                      <p className="station-distance">
+                        <i className="fas fa-route"></i>
+                        {station.distance ? `${station.distance.toFixed(1)} km` : 'N/A'}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <p className="station-address">
+                    <i className="fas fa-map-pin"></i>
+                    {station.address || 'Địa chỉ không xác định'}
+                  </p>
+                  
+                  <div className="station-meta">
+                    <span className={`status-badge ${station.online ? 'online' : 'offline'}`}>
+                      <i className={`fas ${station.online ? 'fa-power-off' : 'fa-exclamation-triangle'}`}></i>
+                      {station.online ? 'Hoạt động' : 'Ngoại tuyến'}
+                    </span>
+                    
+                    <span className="connectors-count">
+                      <i className="fas fa-plug"></i>
+                      {Array.isArray(station.connectors) 
+                        ? station.connectors.length 
+                        : Object.keys(station.connectors || {}).length
+                      } cổng
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="station-action">
+                  <button className="direction-btn">
+                    <i className="fas fa-directions"></i>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          {/* Thông báo nếu chưa có vị trí */}
+          {!userPos && (
+            <div className="location-prompt">
+              <div className="location-prompt-icon">
+                <i className="fas fa-map-marker-alt"></i>
+              </div>
+              <div className="location-prompt-content">
+                <h4>Cho phép truy cập vị trí</h4>
+                <p>Để hiển thị trạm sạc gần nhất, vui lòng cho phép ứng dụng truy cập vị trí của bạn.</p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Map Section */}
       <div className="map-section">
         <div className="map-header">
           <h3 className="map-title">Bản đồ trạm sạc</h3>
         </div>
         <div className="map-container">
-          <StationMap stations={validStations} onStationClick={setSelectedStation} />
+          <StationMap 
+          stations={validStations}
+          onStationClick={setSelectedStation}
+          userPos={userPos}
+           />
         </div>
       </div>
 
@@ -299,6 +435,7 @@ function Home() {
       {selectedStation && (
         <StationDetailPopup
           station={selectedStation}
+          userPos={userPos}
           onClose={() => setSelectedStation(null)}
         />
       )}

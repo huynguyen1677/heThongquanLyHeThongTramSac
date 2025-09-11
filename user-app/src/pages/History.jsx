@@ -6,6 +6,7 @@ import { format } from 'date-fns'
 import { vi } from 'date-fns/locale'
 import '../styles/history-page.css'
 import SessionCard from "../components/SessionCard";
+import { formatEnergy, formatCurrency } from '../utils/formatUtils';
 import {
   countTotalSessions,
   filterCompletedSessions,
@@ -77,7 +78,7 @@ function History() {
     return {
       totalSessions,
       completedSessions: completedSessionsArr.length,
-      totalEnergy: totalEnergykWh,
+      totalEnergy: formatEnergy(totalEnergykWh),
       totalCost: Math.round(totalCost),
       avgDuration
     };
@@ -170,26 +171,14 @@ function History() {
           <div className="stat-content">
             <div className="stat-info">
               <p className="stat-label">Năng lượng</p>
-              <p className="stat-value">{stats.totalEnergy} kWh</p>
+              <p className="stat-value">{stats.totalEnergy}</p>
             </div>
             <div className="stat-icon icon-bg-warning">
               <i className="fas fa-bolt"></i>
             </div>
           </div>
         </div>
-        
-        <div className="stat-card stat-info">
-          <div className="stat-content">
-            <div className="stat-info">
-              <p className="stat-label">Chi phí</p>
-              <p className="stat-value">{stats.totalCost.toLocaleString()}₫</p>
-            </div>
-            <div className="stat-icon icon-bg-info">
-              <i className="fas fa-wallet"></i>
-            </div>
-          </div>
-        </div>
-        
+                
         <div className="stat-card stat-secondary">
           <div className="stat-content">
             <div className="stat-info">

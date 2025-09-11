@@ -8,7 +8,7 @@ import Settings from './pages/Settings'
 import ChargingSession from './pages/ChargingSession'
 import Profile from './pages/Profile'
 import Login from './pages/Login'
-import Wallet from './pages/Wallet'  // Thêm import cho Wallet
+import Wallet from './pages/wallet'  // Thêm import cho Wallet
 import { AuthProvider } from './contexts/AuthContext'
 import { ChargingProvider } from './contexts/ChargingContext'
 import StationList from "./components/StationList";

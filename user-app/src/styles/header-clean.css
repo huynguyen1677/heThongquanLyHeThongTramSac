@@ -324,11 +324,11 @@
   }
   
   .header-left h2 {
-    color: var(--white);
+    color: var(--text-primary);
   }
   
   .header-left p {
-    color: var(--gray-300);
+    color: var(--text-primary);
   }
   
   .connection-status {
