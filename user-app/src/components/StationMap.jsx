@@ -12,10 +12,10 @@ const userIcon = new L.Icon({
 });
 
 const stationIcon = new L.Icon({
-  iconUrl: "https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-green.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
+  iconUrl: "https://cdn-icons-png.flaticon.com/512/4430/4430939.png",
+  iconSize: [32, 32], // chỉnh lại cho phù hợp
+  iconAnchor: [16, 32],
+  popupAnchor: [0, -32],
 });
 
 function UserMarker({ setMapCenter }) {

@@ -1,50 +1,53 @@
-import React, { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import '../styles/auth-page.css';
 
-const Login = () => {
-  const [isLogin, setIsLogin] = useState(true)
+function Login() {
+  const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
     name: '',
     phone: '',
     confirmPassword: ''
-  })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const { login, register } = useAuth()
-  const navigate = useNavigate()
+  const { login, register } = useAuth();
+  const navigate = useNavigate();
 
   const handleInputChange = (e) => {
     setFormData(prev => ({
       ...prev,
       [e.target.name]: e.target.value
-    }))
-    setError('')
-  }
+    }));
+    setError('');
+  };
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
+    e.preventDefault();
+    setLoading(true);
+    setError('');
 
     try {
       if (isLogin) {
-        const result = await login(formData.email, formData.password)
+        const result = await login(formData.email, formData.password);
         if (result.success) {
-          navigate('/')
+          navigate('/');
         } else {
-          setError(result.error)
+          setError(result.error);
         }
       } else {
         if (formData.password !== formData.confirmPassword) {
-          setError('Mật khẩu xác nhận không khớp')
-          setLoading(false)
-          return
+          setError('Mật khẩu xác nhận không khớp');
+          setLoading(false);
+          return;
         }
-        const result = await register(formData.email, formData.password, formData.name, formData.phone)
+        const result = await register(formData.email, formData.password, formData.name, formData.phone);
         if (result.success) {
           setFormData({
             email: '',
@@ -52,174 +55,249 @@ const Login = () => {
             name: '',
             phone: '',
             confirmPassword: ''
-          })
-          setError('')
-          setIsLogin(true)
+          });
+          setError('');
+          setIsLogin(true);
         } else {
-          setError(result.error)
+          setError(result.error);
         }
       }
     } catch (error) {
-      setError(error.message || 'Có lỗi xảy ra')
+      setError(error.message || 'Có lỗi xảy ra');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
-    <div className="min-h-screen flex items-center justify-center py-12">
-      <div className="container">
-        <div className="max-w-md mx-auto">
-          <div className="card">
-            <div className="card-header text-center">
-              <Link to="/" className="logo mb-4 inline-flex">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor" className="mr-2">
-                  <path d="M12 2L13.09 8.26L22 9L13.09 9.74L12 16L10.91 9.74L2 9L10.91 8.26L12 2Z"/>
-                  <circle cx="12" cy="12" r="3" fill="white"/>
-                </svg>
-                EV Charging
-              </Link>
-              
-              <h2 className="text-2xl font-bold mb-2">
-                {isLogin ? 'Đăng nhập' : 'Đăng ký'}
-              </h2>
-              <p className="text-gray-600">
-                {isLogin 
-                  ? 'Đăng nhập để bắt đầu sạc xe điện'
-                  : 'Tạo tài khoản mới để sử dụng dịch vụ'
-                }
-              </p>
+    <div className="auth-container">
+      <div className="auth-background">
+        <div className="auth-wave"></div>
+        <div className="auth-wave auth-wave-2"></div>
+      </div>
+      
+      <div className="auth-content">
+        {/* Logo và Back Button */}
+        <div className="auth-header">
+          <Link to="/" className="back-link">
+            <i className="fas fa-arrow-left"></i>
+            <span>Quay lại trang chủ</span>
+          </Link>
+          
+          <div className="auth-logo">
+            <div className="logo-icon">
+              <i className="fas fa-charging-station"></i>
             </div>
+            <span className="logo-text">EV Charging</span>
+          </div>
+        </div>
 
-            <div className="card-body">
-              {error && (
-                <div className="bg-danger-100 text-danger-600 p-4 rounded mb-4">
-                  {error}
-                </div>
+        {/* Auth Card */}
+        <div className="auth-card">
+          <div className="auth-card-header">
+            <h1 className="auth-title">
+              {isLogin ? 'Chào mừng trở lại!' : 'Tạo tài khoản mới'}
+            </h1>
+            <p className="auth-subtitle">
+              {isLogin 
+                ? 'Đăng nhập để tiếp tục sử dụng dịch vụ sạc xe điện'
+                : 'Đăng ký để trải nghiệm dịch vụ sạc xe điện tiện lợi'
+              }
+            </p>
+          </div>
+
+          <div className="auth-card-body">
+            {error && (
+              <div className="error-alert">
+                <i className="fas fa-exclamation-triangle"></i>
+                <span>{error}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="auth-form">
+              {!isLogin && (
+                <>
+                  <div className="form-group">
+                    <label className="form-label">
+                      <i className="fas fa-user"></i>
+                      Họ và tên
+                    </label>
+                    <input
+                      type="text"
+                      name="name"
+                      value={formData.name}
+                      onChange={handleInputChange}
+                      className="form-input"
+                      placeholder="Nhập họ tên của bạn"
+                      required={!isLogin}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">
+                      <i className="fas fa-phone"></i>
+                      Số điện thoại
+                    </label>
+                    <input
+                      type="tel"
+                      name="phone"
+                      value={formData.phone}
+                      onChange={handleInputChange}
+                      className="form-input"
+                      placeholder="0901234567"
+                    />
+                  </div>
+                </>
               )}
 
-              <form onSubmit={handleSubmit}>
-                {!isLogin && (
-                  <>
-                    <div className="mb-4">
-                      <label className="form-label">Họ tên</label>
-                      <input
-                        type="text"
-                        name="name"
-                        value={formData.name}
-                        onChange={handleInputChange}
-                        className="form-input"
-                        required={!isLogin}
-                        placeholder="Nhập họ tên của bạn"
-                      />
-                    </div>
-                    <div className="mb-4">
-                      <label className="form-label">Số điện thoại</label>
-                      <input
-                        type="tel"
-                        name="phone"
-                        value={formData.phone}
-                        onChange={handleInputChange}
-                        className="form-input"
-                        placeholder="0901234567"
-                      />
-                    </div>
-                  </>
-                )}
+              <div className="form-group">
+                <label className="form-label">
+                  <i className="fas fa-envelope"></i>
+                  Email
+                </label>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  className="form-input"
+                  placeholder="name@example.com"
+                  required
+                />
+              </div>
 
-                <div className="mb-4">
-                  <label className="form-label">Email</label>
+              <div className="form-group">
+                <label className="form-label">
+                  <i className="fas fa-lock"></i>
+                  Mật khẩu
+                </label>
+                <div className="password-input-wrapper">
                   <input
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    className="form-input"
-                    required
-                    placeholder="name@example.com"
-                  />
-                </div>
-
-                <div className="mb-4">
-                  <label className="form-label">Mật khẩu</label>
-                  <input
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     name="password"
                     value={formData.password}
                     onChange={handleInputChange}
                     className="form-input"
-                    required
                     placeholder="Nhập mật khẩu"
+                    required
                     minLength="6"
                   />
+                  <button
+                    type="button"
+                    className="password-toggle"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+                  </button>
                 </div>
+              </div>
 
-                {!isLogin && (
-                  <div className="mb-6">
-                    <label className="form-label">Xác nhận mật khẩu</label>
+              {!isLogin && (
+                <div className="form-group">
+                  <label className="form-label">
+                    <i className="fas fa-lock"></i>
+                    Xác nhận mật khẩu
+                  </label>
+                  <div className="password-input-wrapper">
                     <input
-                      type="password"
+                      type={showConfirmPassword ? "text" : "password"}
                       name="confirmPassword"
                       value={formData.confirmPassword}
                       onChange={handleInputChange}
                       className="form-input"
-                      required={!isLogin}
                       placeholder="Nhập lại mật khẩu"
+                      required={!isLogin}
                       minLength="6"
                     />
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    >
+                      <i className={`fas ${showConfirmPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+                    </button>
                   </div>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="btn btn-primary w-full mb-4"
-                >
-                  {loading ? (
-                    <>
-                      <div className="spinner mr-2"></div>
-                      {isLogin ? 'Đang đăng nhập...' : 'Đang đăng ký...'}
-                    </>
-                  ) : (
-                    isLogin ? 'Đăng nhập' : 'Đăng ký'
-                  )}
-                </button>
-
-                <div className="text-center">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsLogin(!isLogin)
-                      setError('')
-                      setFormData({
-                        email: '',
-                        password: '',
-                        name: '',
-                        phone: '',
-                        confirmPassword: ''
-                      })
-                    }}
-                    className="text-primary-600 hover:text-primary-700"
-                  >
-                    {isLogin 
-                      ? 'Chưa có tài khoản? Đăng ký ngay'
-                      : 'Đã có tài khoản? Đăng nhập'
-                    }
-                  </button>
                 </div>
-              </form>
-            </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="btn-auth-primary"
+              >
+                {loading ? (
+                  <>
+                    <div className="spinner"></div>
+                    {isLogin ? 'Đang đăng nhập...' : 'Đang đăng ký...'}
+                  </>
+                ) : (
+                  <>
+                    <i className={`fas ${isLogin ? 'fa-sign-in-alt' : 'fa-user-plus'}`}></i>
+                    {isLogin ? 'Đăng nhập' : 'Đăng ký'}
+                  </>
+                )}
+              </button>
+
+              {isLogin && (
+                <div className="forgot-password">
+                  <Link to="/forgot-password" className="forgot-link">
+                    Quên mật khẩu?
+                  </Link>
+                </div>
+              )}
+            </form>
           </div>
 
-          <div className="text-center mt-6">
-            <Link to="/" className="text-gray-600 hover:text-gray-700">
-              ← Quay lại trang chủ
-            </Link>
+          <div className="auth-card-footer">
+            <div className="auth-switch">
+              <span className="switch-text">
+                {isLogin ? 'Chưa có tài khoản?' : 'Đã có tài khoản?'}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLogin(!isLogin);
+                  setError('');
+                  setFormData({
+                    email: '',
+                    password: '',
+                    name: '',
+                    phone: '',
+                    confirmPassword: ''
+                  });
+                }}
+                className="switch-button"
+              >
+                {isLogin ? 'Đăng ký ngay' : 'Đăng nhập'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Features */}
+        <div className="auth-features">
+          <div className="feature-item">
+            <div className="feature-icon">
+              <i className="fas fa-bolt"></i>
+            </div>
+            <span>Sạc nhanh</span>
+          </div>
+          <div className="feature-item">
+            <div className="feature-icon">
+              <i className="fas fa-map-marker-alt"></i>
+            </div>
+            <span>Tìm trạm dễ dàng</span>
+          </div>
+          <div className="feature-item">
+            <div className="feature-icon">
+              <i className="fas fa-wallet"></i>
+            </div>
+            <span>Thanh toán tiện lợi</span>
           </div>
         </div>
       </div>
     </div>
-  )
+  );
 }
 
-export default Login
+export default Login;

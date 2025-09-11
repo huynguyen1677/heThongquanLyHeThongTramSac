@@ -1,6 +1,5 @@
 /* Import required styles */
 @import './colors.css';
-@import './components.css';
 
 /* Container */
 .history-container {
@@ -812,4 +811,39 @@
     gap: var(--spacing-md);
     align-items: stretch;
   }
+}
+
+/* Thêm vào cuối file */
+.btn-auth-required {
+  padding: 12px 24px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+  color: #fff;
+  border: none;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  min-width: 140px;
+  justify-content: center;
+}
+
+.btn-auth-required i {
+  font-size: 1rem;
+}
+
+.btn-auth-required:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.35);
+  transform: translateY(-2px);
+  color: #fff;
+}
+
+.btn-auth-required:active {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
 }

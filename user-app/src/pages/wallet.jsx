@@ -258,7 +258,7 @@ function Wallet() {
           </div>
           <h1 className="auth-title">Ví điện tử</h1>
           <p className="auth-message">Vui lòng đăng nhập để quản lý ví của bạn</p>
-          <Link to="/login" className="btn btn-primary btn-lg">
+          <Link to="/login" className="btn-auth-required">
             <i className="fas fa-sign-in-alt"></i>
             Đăng nhập
           </Link>

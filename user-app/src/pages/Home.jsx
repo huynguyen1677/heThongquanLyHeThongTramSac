@@ -236,7 +236,7 @@ function Home() {
         <div className="stat-card">
           <div className="stat-content">
             <div className="stat-info">
-              <p className="stat-label">Tổng kWh đã sạc</p>
+              <p className="stat-label">Đã sạc tháng này</p>
               <p className="stat-value">{userData.totalKWh}</p>
             </div>
             <div className="stat-icon icon-bg-orange">

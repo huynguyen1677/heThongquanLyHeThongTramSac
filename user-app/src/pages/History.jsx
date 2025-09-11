@@ -101,23 +101,24 @@ function History() {
     setStationFilter('all')
   }
 
-  if (!user) {
+    if (!user) {
     return (
-      <div className="history-container">
+      <div className="wallet-container">
         <div className="auth-required">
           <div className="auth-icon">
-            <i className="fas fa-user-lock"></i>
+            <i className="fas fa-wallet"></i>
           </div>
           <h1 className="auth-title">Lịch sử sạc</h1>
           <p className="auth-message">Vui lòng đăng nhập để xem lịch sử sạc của bạn</p>
-          <Link to="/login" className="btn btn-primary btn-lg">
+          <Link to="/login" className="btn-auth-required">
             <i className="fas fa-sign-in-alt"></i>
             Đăng nhập
           </Link>
         </div>
       </div>
-    )
+    );
   }
+
 
   return (
     <div className="history-container">

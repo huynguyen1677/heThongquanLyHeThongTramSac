@@ -307,7 +307,6 @@ const Profile = () => {
 
         {/* Danger Zone */}
         <div className="profile-card danger-zone">
-          <h3>Vùng nguy hiểm</h3>
           <p>Đăng xuất khỏi tài khoản hiện tại. Bạn sẽ cần đăng nhập lại để sử dụng dịch vụ.</p>
           <button className="btn btn-danger" onClick={handleLogout}>
             <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
