@@ -260,70 +260,151 @@ function Home() {
 
       {/* Current Charging Status - CHỈ hiển thị khi có dữ liệu thực tế */}
       {currentCharging && 
-       currentCharging.isCharging && 
-       currentCharging.status === "Charging" && 
-       currentCharging.currentEnergyKwh !== undefined && 
-       currentCharging.fullChargeThresholdKwh > 0 && (
-        <div className="charging-card">
-          <div className="charging-content">
-            <div className="charging-info">
-              <h3 className="charging-title">
-                Trạng thái sạc hiện tại
-                <span className="realtime-indicator">
-                  <i className="fas fa-circle" style={{color: '#4CAF50', fontSize: '8px'}}></i>
-                </span>
-              </h3>
-              <p className="charging-station">Trạm sạc: {currentCharging.station}</p>
-              <div className="charging-stats">
-                <div className="charging-stat">
-                  <p className="charging-stat-label">Công suất</p>
-                  <p className="charging-stat-value">{currentCharging.power}</p>
-                </div>
-                <div className="charging-stat">
-                  <p className="charging-stat-label">Thời gian sạc</p>
-                  <p className="charging-stat-value">{currentCharging.time}</p>
-                </div>
-                <div className="charging-stat">
-                  <p className="charging-stat-label">Tiến độ</p>
-                  <p className="charging-stat-value">{currentCharging.progress}%</p>
+      currentCharging.isCharging && 
+      currentCharging.status === "Charging" && 
+      currentCharging.currentEnergyKwh !== undefined && 
+      currentCharging.fullChargeThresholdKwh > 0 && (
+        <div className="charging-status-card">
+          <div className="charging-background">
+            <div className="charging-wave"></div>
+            <div className="charging-wave charging-wave-2"></div>
+          </div>
+          
+          <div className="charging-header">
+            <div className="charging-header-left">
+              <div className="charging-title-group">
+                <h3 className="charging-title">
+                  <i className="fas fa-bolt charging-bolt"></i>
+                  Đang sạc xe điện
+                </h3>
+                <div className="realtime-badge">
+                  <div className="realtime-dot"></div>
+                  <span>Thời gian thực</span>
                 </div>
               </div>
-              
-              {/* Thông tin chi tiết */}
-              <div className="charging-details">
-                <div className="detail-row">
-                  <span className="detail-label">Đã sạc:</span>
-                  <span className="detail-value">
-                    {currentCharging.currentEnergyKwh.toFixed(2)} / {currentCharging.fullChargeThresholdKwh} kWh
-                  </span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Chi phí thực tế:</span>
-                  <span className="detail-value">{currentCharging.estimatedCost.toLocaleString('vi-VN')}₫</span>
-                </div>
-              </div>
+              <p className="charging-station">{currentCharging.station}</p>
             </div>
             
-            <div className="charging-icon-only">
+            <div className="charging-icon-large">
+              <div className="charging-pulse"></div>
               <i className="fas fa-charging-station"></i>
             </div>
           </div>
-          
-          {/* Progress Bar */}
-          <div className="charging-progress">
-            <div className="progress-header">
-              <span>Tiến độ sạc</span>
-              <span>{currentCharging.progress}% / 100%</span>
+
+          <div className="charging-main-content">
+            <div className="charging-stats-modern">
+              <div className="stat-item stat-power">
+                <div className="stat-icon-wrapper">
+                  <i className="fas fa-flash"></i>
+                </div>
+                <div className="stat-content">
+                  <span className="stat-label">Công suất</span>
+                  <span className="stat-value">{currentCharging.power}</span>
+                </div>
+              </div>
+
+              <div className="stat-item stat-time">
+                <div className="stat-icon-wrapper">
+                  <i className="fas fa-clock"></i>
+                </div>
+                <div className="stat-content">
+                  <span className="stat-label">Thời gian</span>
+                  <span className="stat-value">{currentCharging.time}</span>
+                </div>
+              </div>
+
+              <div className="stat-item stat-progress">
+                <div className="stat-icon-wrapper">
+                  <i className="fas fa-battery-half"></i>
+                </div>
+                <div className="stat-content">
+                  <span className="stat-label">Tiến độ</span>
+                  <span className="stat-value">{currentCharging.progress}%</span>
+                </div>
+              </div>
             </div>
-            <div className="progress-bar">
+
+            <div className="energy-display">
+              <div className="energy-circle">
+                <svg className="progress-ring" width="120" height="120" viewBox="0 0 120 120">
+                  <circle
+                    className="progress-ring-background"
+                    stroke="#e2e8f0"
+                    strokeWidth="8"
+                    fill="transparent"
+                    r="52"
+                    cx="60"
+                    cy="60"
+                  />
+                  <circle
+                    className="progress-ring-fill"
+                    stroke="url(#gradient)"
+                    strokeWidth="8"
+                    fill="transparent"
+                    r="52"
+                    cx="60"
+                    cy="60"
+                    strokeDasharray={`${2 * Math.PI * 52}`}
+                    strokeDashoffset={`${2 * Math.PI * 52 * (1 - currentCharging.progress / 100)}`}
+                  />
+                  <defs>
+                    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#10b981" />
+                      <stop offset="100%" stopColor="#059669" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+                <div className="energy-text">
+                  <span className="energy-percentage">{currentCharging.progress}%</span>
+                  <span className="energy-label">Hoàn thành</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="charging-details-modern">
+            <div className="detail-card">
+              <div className="detail-icon">
+                <i className="fas fa-bolt"></i>
+              </div>
+              <div className="detail-content">
+                <span className="detail-label">Năng lượng đã sạc</span>
+                <span className="detail-value">
+                  {currentCharging.currentEnergyKwh.toFixed(2)} / {currentCharging.fullChargeThresholdKwh} kWh
+                </span>
+              </div>
+            </div>
+
+            <div className="detail-card">
+              <div className="detail-icon">
+                <i className="fas fa-money-bill-wave"></i>
+              </div>
+              <div className="detail-content">
+                <span className="detail-label">Chi phí hiện tại</span>
+                <span className="detail-value">{currentCharging.estimatedCost.toLocaleString('vi-VN')}₫</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="charging-progress-modern">
+            <div className="progress-header-modern">
+              <span className="progress-title">Tiến độ sạc pin</span>
+              <span className="progress-percentage">{currentCharging.progress}%</span>
+            </div>
+            <div className="progress-bar-modern">
               <div 
-                className="progress-fill" 
+                className="progress-fill-modern" 
                 style={{ 
                   width: `${currentCharging.progress}%`,
-                  backgroundColor: '#4CAF50',
-                  transition: 'width 0.3s ease'
                 }}
-              ></div>
+              >
+                <div className="progress-glow"></div>
+              </div>
+            </div>
+            <div className="progress-labels">
+              <span>0%</span>
+              <span>50%</span>
+              <span>100%</span>
             </div>
           </div>
         </div>
