@@ -298,10 +298,33 @@ export class FirestoreService extends BaseService {
    * Lấy tất cả owners
    */
   static async getAllOwners() {
-    return this.getAll('owners', { 
-      orderField: 'createdAt', 
-      orderDirection: 'desc' 
-    });
+    try {
+      // Lấy tất cả users từ collection 'users'
+      const allUsers = await this.getAll('users', { 
+        orderField: 'createdAt', 
+        orderDirection: 'desc' 
+      });
+      
+      // Lọc những users có thể làm owner (có thể lọc theo role hoặc không lọc)
+      // Tạm thời trả về tất cả users để hiển thị
+      return allUsers.map(user => ({
+        id: user.id,
+        name: user.name || 'N/A',
+        email: user.email || 'N/A', 
+        phone: user.phone || '',
+        company: user.company || '',
+        address: user.address || '',
+        role: user.role || 'user',
+        status: user.status || 'active',
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt || user.lastUpdated,
+        userId: user.userId,
+        walletBalance: user.walletBalance || 0
+      }));
+    } catch (error) {
+      console.error('Error getting all owners:', error);
+      return [];
+    }
   }
 
   /**
@@ -309,11 +332,32 @@ export class FirestoreService extends BaseService {
    * @param {string} ownerId - ID của owner
    */
   static async getOwner(ownerId) {
-    return this.getById('owners', ownerId);
+    try {
+      const user = await this.getById('users', ownerId);
+      if (!user) return null;
+      
+      return {
+        id: user.id,
+        name: user.name || 'N/A',
+        email: user.email || 'N/A', 
+        phone: user.phone || '',
+        company: user.company || '',
+        address: user.address || '',
+        role: user.role || 'user',
+        status: user.status || 'active',
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt || user.lastUpdated,
+        userId: user.userId,
+        walletBalance: user.walletBalance || 0
+      };
+    } catch (error) {
+      console.error('Error getting owner:', error);
+      return null;
+    }
   }
 
   /**
-   * Tạo owner mới
+   * Tạo owner mới (thực chất là tạo user mới)
    * @param {Object} ownerData - Dữ liệu owner
    */
   static async createOwner(ownerData) {
@@ -332,14 +376,19 @@ export class FirestoreService extends BaseService {
 
     const enhancedData = {
       ...ownerData,
-      status: ownerData.status || 'active'
+      status: ownerData.status || 'active',
+      role: ownerData.role || 'owner',
+      walletBalance: ownerData.walletBalance || 0,
+      userId: ownerData.userId || this.generateUserId(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
-    return this.create('owners', enhancedData);
+    return this.create('users', enhancedData);
   }
 
   /**
-   * Cập nhật owner
+   * Cập nhật owner (thực chất là cập nhật user)
    * @param {string} ownerId - ID của owner
    * @param {Object} updateData - Dữ liệu cập nhật
    */
@@ -354,15 +403,21 @@ export class FirestoreService extends BaseService {
       throw new Error('Invalid phone number format');
     }
 
-    return this.update('owners', ownerId, updateData);
+    const enhancedUpdateData = {
+      ...updateData,
+      lastUpdated: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    return this.update('users', ownerId, enhancedUpdateData);
   }
 
   /**
-   * Xóa owner
+   * Xóa owner (thực chất là xóa user)
    * @param {string} ownerId - ID của owner
    */
   static async deleteOwner(ownerId) {
-    return this.delete('owners', ownerId);
+    return this.delete('users', ownerId);
   }
 
   /**
@@ -664,6 +719,17 @@ export class FirestoreService extends BaseService {
     } catch (error) {
       return this.handleError(error, 'Batch operations');
     }
+  }
+
+  // ===== UTILITY METHODS =====
+
+  /**
+   * Generate unique user ID
+   */
+  static generateUserId() {
+    // Generate a 6-digit user ID
+    const randomNumber = Math.floor(100000 + Math.random() * 900000);
+    return randomNumber.toString().padStart(6, '0');
   }
 }
 
