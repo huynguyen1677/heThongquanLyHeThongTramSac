@@ -38,6 +38,7 @@ const Dashboard = ({ ownerId }) => {
     averageSessionTime: 0,
     monthlyRevenue: [],
     dailyRevenue: [],
+    hourlyRevenue: [],
     stationUsage: [],
     revenueByStation: []
   });
@@ -98,6 +99,7 @@ const Dashboard = ({ ownerId }) => {
         averageSessionTime: 0,
         monthlyRevenue: [],
         dailyRevenue: [],
+        hourlyRevenue: [],
         stationUsage: [],
         revenueByStation: []
       });
@@ -153,6 +155,27 @@ const Dashboard = ({ ownerId }) => {
     ],
   };
 
+  const hourlyRevenueChartData = {
+    labels: dashboardData.hourlyRevenue.map(item => item.hour),
+    datasets: [
+      {
+        label: 'Doanh thu theo giờ (VND)',
+        data: dashboardData.hourlyRevenue.map(item => item.revenue),
+        backgroundColor: 'rgba(147, 51, 234, 0.5)',
+        borderColor: 'rgba(147, 51, 234, 1)',
+        borderWidth: 2,
+      },
+      {
+        label: 'Số phiên sạc',
+        data: dashboardData.hourlyRevenue.map(item => item.sessions),
+        backgroundColor: 'rgba(59, 130, 246, 0.5)',
+        borderColor: 'rgba(59, 130, 246, 1)',
+        borderWidth: 2,
+        yAxisID: 'y1',
+      },
+    ],
+  };
+
   const stationUsageChartData = {
     labels: dashboardData.stationUsage.map(item => item.name),
     datasets: [
@@ -191,6 +214,52 @@ const Dashboard = ({ ownerId }) => {
         }
       }
     }
+  };
+
+  const hourlyChartOptions = {
+    responsive: true,
+    interaction: {
+      mode: 'index',
+      intersect: false,
+    },
+    plugins: {
+      legend: {
+        position: 'top',
+      },
+      title: {
+        display: false,
+      },
+    },
+    scales: {
+      y: {
+        type: 'linear',
+        display: true,
+        position: 'left',
+        beginAtZero: true,
+        title: {
+          display: true,
+          text: 'Doanh thu (VND)'
+        },
+        ticks: {
+          callback: function(value) {
+            return new Intl.NumberFormat('vi-VN').format(value);
+          }
+        }
+      },
+      y1: {
+        type: 'linear',
+        display: true,
+        position: 'right',
+        beginAtZero: true,
+        title: {
+          display: true,
+          text: 'Số phiên sạc'
+        },
+        grid: {
+          drawOnChartArea: false,
+        },
+      },
+    },
   };
 
   const doughnutOptions = {
@@ -263,6 +332,8 @@ const Dashboard = ({ ownerId }) => {
           onChange={(e) => setTimeRange(e.target.value)}
           style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid #d1d5db' }}
         >
+          <option value="today">Hôm nay</option>
+          <option value="yesterday">Hôm qua</option>
           <option value="week">7 ngày qua</option>
           <option value="month">Tháng hiện tại</option>
           <option value="year">Năm hiện tại</option>
@@ -271,7 +342,12 @@ const Dashboard = ({ ownerId }) => {
         <select
           value={selectedMonth}
           onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-          style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid #d1d5db' }}
+          style={{ 
+            padding: '0.5rem', 
+            borderRadius: '6px', 
+            border: '1px solid #d1d5db',
+            display: (timeRange === 'today' || timeRange === 'yesterday') ? 'none' : 'block'
+          }}
         >
           {Array.from({ length: 12 }, (_, i) => (
             <option key={i} value={i}>Tháng {i + 1}</option>
@@ -281,7 +357,12 @@ const Dashboard = ({ ownerId }) => {
         <select
           value={selectedYear}
           onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-          style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid #d1d5db' }}
+          style={{ 
+            padding: '0.5rem', 
+            borderRadius: '6px', 
+            border: '1px solid #d1d5db',
+            display: (timeRange === 'today' || timeRange === 'yesterday') ? 'none' : 'block'
+          }}
         >
           {[2023, 2024, 2025].map(year => (
             <option key={year} value={year}>{year}</option>
@@ -405,7 +486,112 @@ const Dashboard = ({ ownerId }) => {
       </div>
 
       {/* Charts */}
-      {dashboardData.monthlyRevenue.length > 0 && (
+      {(timeRange === 'today' || timeRange === 'yesterday') && dashboardData.hourlyRevenue.length > 0 && (
+        <div className="card" style={{ marginBottom: '2rem' }}>
+          <div className="card-header">
+            <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: '600' }}>
+              🕐 Doanh thu theo giờ - {timeRange === 'today' ? 'Hôm nay' : 'Hôm qua'}
+            </h3>
+          </div>
+          <div className="card-body">
+            <Bar data={hourlyRevenueChartData} options={hourlyChartOptions} />
+          </div>
+        </div>
+      )}
+
+      {/* Daily Statistics Summary for Today/Yesterday */}
+      {(timeRange === 'today' || timeRange === 'yesterday') && (
+        <div className="card" style={{ marginBottom: '2rem' }}>
+          <div className="card-header">
+            <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: '600' }}>
+              📋 Chi tiết thống kê - {timeRange === 'today' ? 'Hôm nay' : 'Hôm qua'}
+            </h3>
+          </div>
+          <div className="card-body">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
+              <div style={{ textAlign: 'center', padding: '1rem', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
+                <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🌅</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: '600', color: '#1f2937' }}>
+                  {dashboardData.hourlyRevenue.slice(6, 12).reduce((sum, item) => sum + item.revenue, 0).toLocaleString('vi-VN')}₫
+                </div>
+                <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>Doanh thu buổi sáng (6h-12h)</div>
+                <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.25rem' }}>
+                  {dashboardData.hourlyRevenue.slice(6, 12).reduce((sum, item) => sum + item.sessions, 0)} phiên sạc
+                </div>
+              </div>
+              
+              <div style={{ textAlign: 'center', padding: '1rem', backgroundColor: '#fef3c7', borderRadius: '8px' }}>
+                <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>☀️</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: '600', color: '#1f2937' }}>
+                  {dashboardData.hourlyRevenue.slice(12, 18).reduce((sum, item) => sum + item.revenue, 0).toLocaleString('vi-VN')}₫
+                </div>
+                <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>Doanh thu buổi chiều (12h-18h)</div>
+                <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.25rem' }}>
+                  {dashboardData.hourlyRevenue.slice(12, 18).reduce((sum, item) => sum + item.sessions, 0)} phiên sạc
+                </div>
+              </div>
+              
+              <div style={{ textAlign: 'center', padding: '1rem', backgroundColor: '#e0e7ff', borderRadius: '8px' }}>
+                <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🌙</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: '600', color: '#1f2937' }}>
+                  {dashboardData.hourlyRevenue.slice(18, 24).reduce((sum, item) => sum + item.revenue, 0).toLocaleString('vi-VN')}₫
+                </div>
+                <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>Doanh thu buổi tối (18h-24h)</div>
+                <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.25rem' }}>
+                  {dashboardData.hourlyRevenue.slice(18, 24).reduce((sum, item) => sum + item.sessions, 0)} phiên sạc
+                </div>
+              </div>
+              
+              <div style={{ textAlign: 'center', padding: '1rem', backgroundColor: '#f3f4f6', borderRadius: '8px' }}>
+                <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🌃</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: '600', color: '#1f2937' }}>
+                  {dashboardData.hourlyRevenue.slice(0, 6).reduce((sum, item) => sum + item.revenue, 0).toLocaleString('vi-VN')}₫
+                </div>
+                <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>Doanh thu đêm khuya (0h-6h)</div>
+                <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.25rem' }}>
+                  {dashboardData.hourlyRevenue.slice(0, 6).reduce((sum, item) => sum + item.sessions, 0)} phiên sạc
+                </div>
+              </div>
+            </div>
+
+            {/* Peak hours analysis */}
+            <div style={{ marginTop: '1.5rem', padding: '1rem', backgroundColor: '#ecfdf5', borderRadius: '8px', border: '1px solid #d1fae5' }}>
+              <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: '600', color: '#065f46', marginBottom: '0.5rem' }}>
+                🏆 Giờ cao điểm
+              </h4>
+              {(() => {
+                const maxRevenueHour = dashboardData.hourlyRevenue.reduce((max, item, index) => 
+                  item.revenue > dashboardData.hourlyRevenue[max].revenue ? index : max, 0
+                );
+                const maxSessionsHour = dashboardData.hourlyRevenue.reduce((max, item, index) => 
+                  item.sessions > dashboardData.hourlyRevenue[max].sessions ? index : max, 0
+                );
+                
+                return (
+                  <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+                    <div>
+                      <span style={{ color: '#047857', fontSize: '0.875rem' }}>💰 Doanh thu cao nhất: </span>
+                      <span style={{ fontWeight: '600', color: '#1f2937' }}>
+                        {dashboardData.hourlyRevenue[maxRevenueHour]?.hour} 
+                        ({dashboardData.hourlyRevenue[maxRevenueHour]?.revenue.toLocaleString('vi-VN')}₫)
+                      </span>
+                    </div>
+                    <div>
+                      <span style={{ color: '#047857', fontSize: '0.875rem' }}>⚡ Phiên sạc nhiều nhất: </span>
+                      <span style={{ fontWeight: '600', color: '#1f2937' }}>
+                        {dashboardData.hourlyRevenue[maxSessionsHour]?.hour} 
+                        ({dashboardData.hourlyRevenue[maxSessionsHour]?.sessions} phiên)
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {dashboardData.monthlyRevenue.length > 0 && timeRange !== 'today' && timeRange !== 'yesterday' && (
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
           {/* Monthly Revenue Chart */}
           <div className="card">
@@ -436,7 +622,7 @@ const Dashboard = ({ ownerId }) => {
       )}
 
       {/* Daily Revenue Chart */}
-      {dashboardData.dailyRevenue.length > 0 && (
+      {dashboardData.dailyRevenue.length > 0 && timeRange === 'month' && (
         <div className="card" style={{ marginBottom: '2rem' }}>
           <div className="card-header">
             <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: '600' }}>

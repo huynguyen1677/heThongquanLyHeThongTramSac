@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Eye, Trash2, MapPin, Zap } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, MapPin, Zap, BarChart3 } from 'lucide-react';
 import FirestoreService from '../services/firestore';
 import RealtimeService from '../services/realtime';
 import StationForm from './StationForm';
 import StationDetail from './StationDetail';
+import StationDashboard from './StationDashboard';
 
 const StationList = ({ ownerId }) => {
   const [stations, setStations] = useState([]);
@@ -12,6 +13,7 @@ const StationList = ({ ownerId }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedStation, setSelectedStation] = useState(null);
+  const [showDashboard, setShowDashboard] = useState(false);
   const [realtimeData, setRealtimeData] = useState({});
 
   // Load stations on mount
@@ -112,6 +114,16 @@ const StationList = ({ ownerId }) => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleViewStationStats = (station) => {
+    setSelectedStation(station);
+    setShowDashboard(true);
+  };
+
+  const closeDashboard = () => {
+    setShowDashboard(false);
+    setSelectedStation(null);
   };
 
   const getStationStatus = (stationId) => {
@@ -294,6 +306,15 @@ const StationList = ({ ownerId }) => {
                       Chi tiết
                     </button>
                     <button 
+                      onClick={() => handleViewStationStats(station)}
+                      className="btn btn-primary"
+                      style={{ flex: 1 }}
+                      title="Xem thống kê trạm sạc"
+                    >
+                      <BarChart3 size={14} />
+                      Thống kê
+                    </button>
+                    <button 
                       onClick={() => handleDeleteStation(station.id)}
                       className="btn btn-danger"
                       style={{ padding: '0.5rem' }}
@@ -328,6 +349,13 @@ const StationList = ({ ownerId }) => {
           station={selectedStation}
           onClose={() => setSelectedStation(null)}
           onStationUpdated={handleStationUpdated}
+        />
+      )}
+
+      {showDashboard && selectedStation && (
+        <StationDashboard
+          station={selectedStation}
+          onClose={closeDashboard}
         />
       )}
     </div>
