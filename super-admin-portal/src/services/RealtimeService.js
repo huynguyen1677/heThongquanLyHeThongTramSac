@@ -81,7 +81,14 @@ export class RealtimeService extends BaseService {
    * Lấy dữ liệu realtime của tất cả stations
    */
   static async getRealtimeStations() {
-    return this.getData('live/stations');
+    console.log('⚡ Fetching realtime stations data...');
+    const data = await this.getData('live/stations');
+    console.log(`⚡ Found ${data ? Object.keys(data).length : 0} realtime stations`);
+    if (data && Object.keys(data).length > 0) {
+      const firstKey = Object.keys(data)[0];
+      console.log(`📄 Sample realtime station (${firstKey}):`, data[firstKey]);
+    }
+    return data;
   }
 
   /**
@@ -538,6 +545,7 @@ export class RealtimeService extends BaseService {
       return this.handleError(error, 'Cleaning up old realtime data', false);
     }
   }
+
 }
 
 export default RealtimeService;

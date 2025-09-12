@@ -428,27 +428,94 @@ export class FirestoreService extends BaseService {
    */
   static async getPaymentsInRange(startDate, endDate, status = 'completed') {
     try {
-      // Temporary fix: Use simpler query to avoid index requirement
-      // Only filter by createdAt to avoid composite index requirement
-      const conditions = [
+      console.log('🔍 Loading payments from', startDate, 'to', endDate);
+      
+      // Try to load from payment_history collection with proper date conversion
+      const conditions = [];
+      
+      // Handle different date formats that might exist in the database
+      // First try with Timestamp
+      conditions.push(
         { field: 'createdAt', operator: '>=', value: Timestamp.fromDate(startDate) },
         { field: 'createdAt', operator: '<=', value: Timestamp.fromDate(endDate) }
-      ];
+      );
 
-      const results = await this.queryDocuments('payment_history', conditions, {
+      let results = await this.queryDocuments('payment_history', conditions, {
         orderField: 'createdAt',
         orderDirection: 'desc'
       });
 
-      // Filter in memory to avoid index requirement
-      return results.filter(payment => {
-        const isPaymentType = payment.type === 'payment';
-        const isCorrectStatus = status ? payment.status === status : true;
-        return isPaymentType && isCorrectStatus;
+      console.log('💾 Raw payment results:', results?.length || 0);
+
+      // If no results with Timestamp, try with string dates
+      if (!results || results.length === 0) {
+        console.log('🔄 Trying with string date format...');
+        const startDateStr = startDate.toISOString();
+        const endDateStr = endDate.toISOString();
+        
+        const stringConditions = [
+          { field: 'createdAt', operator: '>=', value: startDateStr },
+          { field: 'createdAt', operator: '<=', value: endDateStr }
+        ];
+
+        results = await this.queryDocuments('payment_history', stringConditions, {
+          orderField: 'createdAt',
+          orderDirection: 'desc'
+        });
+      }
+
+      // Filter and validate data
+      const validPayments = (results || []).filter(payment => {
+        const hasCorrectType = payment.type === 'payment';
+        const hasCorrectStatus = status ? payment.status === status : true;
+        const hasAmount = typeof payment.amount === 'number' && payment.amount > 0;
+        
+        return hasCorrectType && hasCorrectStatus && hasAmount;
       });
+
+      console.log('✅ Valid payments found:', validPayments.length);
+      if (validPayments.length > 0) {
+        console.log('📊 Sample payment:', validPayments[0]);
+      }
+
+      return validPayments;
     } catch (error) {
-      console.warn('⚠️ Payment query failed, returning empty array:', error.message);
-      return [];
+      console.warn('⚠️ Payment query failed, trying alternative approach:', error.message);
+      
+      // Fallback: get all payments and filter in memory
+      try {
+        const allPayments = await this.getAll('payment_history', {
+          orderField: 'createdAt',
+          orderDirection: 'desc',
+          limitCount: 1000
+        });
+
+        const filteredPayments = (allPayments || []).filter(payment => {
+          if (payment.type !== 'payment' || (status && payment.status !== status)) {
+            return false;
+          }
+
+          // Handle different date formats
+          let paymentDate;
+          if (payment.createdAt) {
+            if (typeof payment.createdAt === 'string') {
+              paymentDate = new Date(payment.createdAt);
+            } else if (payment.createdAt.toDate) {
+              paymentDate = payment.createdAt.toDate();
+            } else {
+              paymentDate = new Date(payment.createdAt);
+            }
+          }
+
+          return paymentDate && paymentDate >= startDate && paymentDate <= endDate;
+        });
+
+        console.log('✅ Fallback: filtered payments found:', filteredPayments.length);
+        return filteredPayments;
+      } catch (fallbackError) {
+        console.error('❌ Fallback payment loading also failed:', fallbackError);
+        return [];
+      }
     }
   }
 

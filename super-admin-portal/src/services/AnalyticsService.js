@@ -28,11 +28,10 @@ export class AnalyticsService extends BaseService {
       console.log('📊 Calculating system overview...');
 
       // Use Promise.allSettled to handle potential errors gracefully
-      const [stationsResult, sessionsResult, paymentsResult, errorsResult, realtimeResult] = await Promise.allSettled([
+      const [stationsResult, sessionsResult, paymentsResult, /* errorsResult, */ realtimeResult] = await Promise.allSettled([
         FirestoreService.getAllStations(),
         FirestoreService.getSessionsByOwner(null, timeRange, selectedMonth, selectedYear),
         FirestoreService.getPaymentsByTimeRange(timeRange, selectedMonth, selectedYear),
-        FirestoreService.getSystemErrors(50),
         RealtimeService.getRealtimeStations()
       ]);
 
@@ -40,14 +39,12 @@ export class AnalyticsService extends BaseService {
       const stations = stationsResult.status === 'fulfilled' ? stationsResult.value : [];
       const sessions = sessionsResult.status === 'fulfilled' ? sessionsResult.value : [];
       const payments = paymentsResult.status === 'fulfilled' ? paymentsResult.value : [];
-      const errors = errorsResult.status === 'fulfilled' ? errorsResult.value : [];
       const realtimeData = realtimeResult.status === 'fulfilled' ? realtimeResult.value : null;
 
       // Log any failures
       if (stationsResult.status === 'rejected') console.warn('⚠️ Failed to load stations:', stationsResult.reason);
       if (sessionsResult.status === 'rejected') console.warn('⚠️ Failed to load sessions:', sessionsResult.reason);
       if (paymentsResult.status === 'rejected') console.warn('⚠️ Failed to load payments:', paymentsResult.reason);
-      if (errorsResult.status === 'rejected') console.warn('⚠️ Failed to load errors:', errorsResult.reason);
       if (realtimeResult.status === 'rejected') console.warn('⚠️ Failed to load realtime data:', realtimeResult.reason);
 
       // Tính toán metrics cơ bản
@@ -55,15 +52,26 @@ export class AnalyticsService extends BaseService {
       const onlineStations = this.calculateOnlineStations(stations, realtimeData);
       const offlineStations = totalStations - onlineStations;
       
-      const activeSessions = sessions.filter(session => 
-        session.status === 'charging' || session.status === 'active'
-      ).length;
+      const activeSessions = this.countChargingConnectors(realtimeData);
 
       const todayRevenue = payments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
       const todayEnergy = payments.reduce((sum, payment) => sum + (payment.energyConsumed || 0), 0);
 
-      // Most common error
-      const mostCommonError = this.calculateMostCommonError(errors);
+      // Most common error: chỉ lấy từ realtime
+      let mostCommonError = 'No errors';
+      let errorCount = 0;
+      if (realtimeData) {
+        Object.values(realtimeData).forEach(station => {
+          if (station.connectors) {
+            Object.values(station.connectors).forEach(connector => {
+              if (connector.status === 'Faulted') {
+                mostCommonError = 'Faulted';
+                errorCount++;
+              }
+            });
+          }
+        });
+      }
 
       const overview = {
         totalStations,
@@ -73,7 +81,7 @@ export class AnalyticsService extends BaseService {
         todayRevenue,
         todayEnergy: this.roundNumber(todayEnergy, 2),
         mostCommonError,
-        errorCount: errors.length,
+        errorCount,
         uptime: this.calculateSystemUptime(stations, realtimeData),
         utilizationRate: this.calculateUtilizationRate(stations, sessions),
         averageSessionDuration: this.calculateAverageSessionDuration(sessions),
@@ -614,7 +622,28 @@ export class AnalyticsService extends BaseService {
     return this.roundNumber(totalUtilization / utilizationByStation.length, 1);
   }
 
- 
+ /**
+ * Đếm số connector đang sạc (trạng thái "Charging") từ realtimeData
+ * @param {Object} realtimeData - Dữ liệu realtime của tất cả stations
+ * @returns {number}
+ */
+static countChargingConnectors(realtimeData) {
+  if (!realtimeData) return 0;
+  let count = 0;
+  Object.values(realtimeData).forEach(station => {
+    if (station.connectors) {
+      Object.values(station.connectors).forEach(connector => {
+        if (
+          connector.status === 'Charging' || // hoặc 'InUse' tùy hệ thống
+          connector.status === 'InUse'
+        ) {
+          count++;
+        }
+      });
+    }
+  });
+  return count;
+}
 
   // ===== EXPORT ANALYTICS DATA =====
 
