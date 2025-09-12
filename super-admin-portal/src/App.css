@@ -1,0 +1,19 @@
+/* App.css - Clean slate for admin portal */
+
+/* Remove all default Vite styling */
+#root {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+/* Admin portal specific styles */
+.admin-portal {
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
