@@ -119,7 +119,7 @@ const ChargingHistory = ({ connectorId, onSessionSelect }) => {
               onClick={clearAllSessions}
               title="Xóa tất cả lịch sử"
             >
-              🗑️ Xóa tất cả
+              Xóa tất cả
             </button>
           )}
         </div>
@@ -151,10 +151,10 @@ const ChargingHistory = ({ connectorId, onSessionSelect }) => {
                       const energyConsumed = energyEnd > energyStart ? energyEnd - energyStart : Number(session.energyConsumed) || 0;
                       return <>
                         <span className="stat-item">
-                          ⚡ {formatEnergy(energyConsumed)}
+                          {formatEnergy(energyConsumed)}
                         </span>
                         <span className="stat-item">
-                          💰 {formatCost(realCost)}
+                          {formatCost(realCost)}
                         </span>
                       </>;
                     })()}

@@ -371,14 +371,14 @@ const ConnectorCard = ({
   return (
     <div className={`connector-card ${disabled ? 'disabled' : ''}`}>
       <div className="connector-header">
-        <h3>🔌 Connector {connectorId}</h3>
+        <h3>Connector {connectorId}</h3>
         {getStatusBadge()}
       </div>
 
       {/* Safety Check Section - Only when Available and connected */}
       {status === 'Available' && isConnected && !disabled && (
         <div className="safety-check-section">
-          <h4>🔒 Kiểm tra an toàn trước khi sạc</h4>
+          <h4>Kiểm tra an toàn trước khi sạc</h4>
           <button 
             onClick={() => setSafetyCheck(s => ({ ...s, parked: !s.parked }))}
             className={safetyCheck.parked ? 'checked' : ''}
@@ -399,8 +399,8 @@ const ConnectorCard = ({
           </button>
           <div className="safety-status">
             {safetyCheck.parked && safetyCheck.plugged && safetyCheck.confirmed
-              ? <span style={{color: 'green'}}>✅ Đã hoàn thành kiểm tra an toàn!</span>
-              : <span style={{color: 'orange'}}>⚠️ Vui lòng hoàn thành tất cả kiểm tra an toàn</span>
+              ? <span style={{color: 'green'}}>Đã hoàn thành kiểm tra an toàn!</span>
+              : <span style={{color: 'orange'}}>Vui lòng hoàn thành tất cả kiểm tra an toàn</span>
             }
           </div>
         </div>
@@ -417,7 +417,7 @@ const ConnectorCard = ({
       {/* ID Tag Input Section */}
       {isConnected && !disabled && (
         <div className="id-tag-section">
-          <h4>🏷️ Nhập ID Tag (User ID)</h4>
+          <h4>Nhập ID Tag (User ID)</h4>
           <div className="id-tag-input">
             <input
               type="text"
@@ -440,7 +440,7 @@ const ConnectorCard = ({
       {isConnected && !disabled && (
         <div className="control-section">
           <div className="power-control">
-            <label>⚡ Công suất (kW):</label>
+            <label>Công suất (kW):</label>
             <input
               type="number"
               value={powerKw}
@@ -491,7 +491,7 @@ const ConnectorCard = ({
               onClick={handleLocalStart}
               disabled={!canStartCharging()}
             >
-              🚀 Bắt đầu sạc
+            Bắt đầu sạc
             </button>
 
             <button
@@ -499,7 +499,7 @@ const ConnectorCard = ({
               onClick={handleLocalStop}
               disabled={!canStop()}
             >
-              ⏹️ Dừng sạc (Local)
+            Dừng sạc 
             </button>
 
             {/* Suspend/Resume Controls */}
@@ -511,7 +511,7 @@ const ConnectorCard = ({
                   disabled={!canSuspend()}
                   style={{ marginTop: 8 }}
                 >
-                  🚗 Xe tạm dừng
+                Xe tạm dừng
                 </button>
 
                 <button
@@ -520,7 +520,7 @@ const ConnectorCard = ({
                   disabled={!canSuspend()}
                   style={{ marginLeft: 8, marginTop: 8 }}
                 >
-                  ⚡ Trạm tạm dừng
+                Trạm tạm dừng
                 </button>
               </>
             )}
@@ -532,7 +532,7 @@ const ConnectorCard = ({
                 disabled={!canResume()}
                 style={{ marginTop: 8 }}
               >
-                🔄 Tiếp tục sạc
+                Tiếp tục sạc
               </button>
             )}
 
@@ -543,7 +543,7 @@ const ConnectorCard = ({
                 onClick={handleCableDisconnect}
                 style={{ marginTop: 8, backgroundColor: '#6c757d' }}
               >
-                🔌 Rút cáp sạc
+              Rút cáp sạc
               </button>
             )}
           </div>
@@ -553,7 +553,7 @@ const ConnectorCard = ({
       {/* Charging Info - Show when there's an active transaction */}
       {transactionId && (
         <div className="charging-info">
-          <h4>📊 Quá trình sạc</h4>
+          <h4>Quá trình sạc</h4>
           
           {/* Progress bar */}
           <div className="charging-progress-bar">

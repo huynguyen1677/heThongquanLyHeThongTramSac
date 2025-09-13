@@ -61,12 +61,12 @@ const SimulatorActions = ({
 
   return (
     <div className="simulator-actions">
-      <h2>🎮 Simulator Actions</h2>
+      <h2>Simulator Actions</h2>
       
       <div className="actions-grid">
         {/* Auto Meter Control */}
         <div className="action-section">
-          <h3>⚙️ Cấu hình</h3>
+          <h3>Cấu hình</h3>
           <div className="setting-item">
             <label className="toggle-switch">
               <input
@@ -85,16 +85,16 @@ const SimulatorActions = ({
 
         {/* Preset Actions */}
         <div className="action-section">
-          <h3>🚀 Quick Actions</h3>
+          <h3>Hành động nhanh</h3>
           <button
             className="btn btn-primary btn-large"
             onClick={handleRunPreset}
             disabled={!isConnected || isRunningPreset}
           >
             {isRunningPreset ? (
-              <>🔄 Đang chạy preset...</>
+              <>Đang chạy preset...</>
             ) : (
-              <>🎯 Chạy Preset Demo</>
+              <>Chạy Preset Demo</>
             )}
           </button>
           <p className="action-description">
@@ -104,7 +104,7 @@ const SimulatorActions = ({
 
         {/* Log Management */}
         <div className="action-section">
-          <h3>📄 Quản lý Logs</h3>
+          <h3>Quản lý Logs</h3>
           <div className="log-stats">
             <div className="stat-item">
               <span className="stat-number">{logSummary.total}</span>
@@ -128,13 +128,13 @@ const SimulatorActions = ({
             onClick={handleExportLogs}
             disabled={!logs || logs.length === 0}
           >
-            📥 Xuất Logs (.json)
+            Xuất Logs (.json)
           </button>
         </div>
 
         {/* Meter Management */}
         <div className="action-section">
-          <h3>🔋 Quản lý Cumulative Meter</h3>
+          <h3>Quản lý Cumulative Meter</h3>
           <div className="meter-controls">
             <p>Simulate máy mới vs máy đang hoạt động:</p>
             <div className="meter-buttons">
@@ -144,7 +144,7 @@ const SimulatorActions = ({
                 disabled={!isConnected}
                 title="Reset tất cả connector về 0 Wh (máy mới)"
               >
-                🆕 Máy mới (0 Wh)
+                Máy mới (0 Wh)
               </button>
               <button
                 className="btn btn-secondary"
@@ -152,7 +152,7 @@ const SimulatorActions = ({
                 disabled={!isConnected}
                 title="Set cumulative meter lớn (máy đang hoạt động)"
               >
-                ⚡ Máy hoạt động (25k Wh)
+                Máy hoạt động (25k Wh)
               </button>
             </div>
             {connectors && connectors.length > 0 && (
@@ -170,7 +170,7 @@ const SimulatorActions = ({
 
         {/* Connection Info */}
         <div className="action-section">
-          <h3>📊 Thông tin kết nối</h3>
+          <h3>Thông tin kết nối</h3>
           <div className="connection-stats">
             <div className="stat-row">
               <span>Trạng thái:</span>
@@ -190,17 +190,6 @@ const SimulatorActions = ({
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Quick Tips */}
-      <div className="tips-section">
-        <h3>💡 Mẹo sử dụng</h3>
-        <ul className="tips-list">
-          <li>Sử dụng <strong>Preset Demo</strong> để test nhanh toàn bộ flow sạc</li>
-          <li>Kiểm tra pre-check (đỗ xe, cắm dây, mã 1234) trước khi Start</li>
-          <li>Power có thể điều chỉnh khi đang sạc để thấy thay đổi meter</li>
-          <li>Xuất logs để phân tích chi tiết giao tiếp OCPP</li>
-        </ul>
       </div>
     </div>
   );

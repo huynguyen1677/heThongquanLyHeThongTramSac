@@ -67,7 +67,7 @@ const ConnectionPanel = ({
 
   return (
     <div className="connection-panel">
-      <h2>🔌 OCPP Station Connection</h2>
+      <h2>OCPP Station Connection</h2>
       
       <div className="connection-form">
         <div className="form-row">
@@ -172,7 +172,7 @@ const ConnectionPanel = ({
               className="btn btn-danger"
               onClick={handleDisconnect}
             >
-              🔌 Ngắt kết nối
+            Ngắt kết nối
             </button>
           )}
         </div>

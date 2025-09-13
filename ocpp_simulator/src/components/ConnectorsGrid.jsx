@@ -11,7 +11,7 @@ function ConnectorsGrid({
 }) {
   return (
     <div className="connectors-section">
-      <h2>🔌 Connectors</h2>
+      <h2>Connectors</h2>
       <div className="connectors-grid">
         {isConnected && connectors.length === 2
           ? connectors.map(connector => (
