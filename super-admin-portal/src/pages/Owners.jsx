@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import FirestoreService from '../services/FirestoreService';
 import SuperAdminService from '../services/superAdminService';
+import StationDetailModal from '../components/StationDetail/StationDetailModal';
 import { 
   isValidEmail,
   isValidPhoneNumber,
@@ -26,6 +27,10 @@ const Owners = () => {
   const [viewMode, setViewMode] = useState('cards'); // 'cards' or 'table'
   const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'active', 'inactive'
   const [sortBy, setSortBy] = useState('name'); // 'name', 'role', 'createdAt', 'walletBalance'
+  
+  // Modal state for station details
+  const [selectedStation, setSelectedStation] = useState(null);
+  const [showStationModal, setShowStationModal] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -159,6 +164,17 @@ const Owners = () => {
     return stations.filter(station =>
       station.ownerId === ownerId || station.ownerId === ownerEmail
     );
+  };
+
+  // Handler for station detail modal
+  const handleStationClick = (station) => {
+    setSelectedStation(station);
+    setShowStationModal(true);
+  };
+
+  const handleCloseStationModal = () => {
+    setShowStationModal(false);
+    setSelectedStation(null);
   };
 
   // Calculate statistics
@@ -300,7 +316,7 @@ const Owners = () => {
             </div>
             <div className="stat-value">{stats.totalStations}</div>
             <div className="stat-change">
-              Trung bình {stats.totalOwners > 0 ? (stats.totalStations / stats.totalOwners).toFixed(1) : 0} trạm/owner
+              Trung bình {stats.totalOwners > 0 ? (stats.totalStations / stats.totalOwners).toFixed(0) : 0} trạm/owner
             </div>
           </div>
         </div>
@@ -451,12 +467,25 @@ const Owners = () => {
                       <h4 className="stations-title">Trạm sạc</h4>
                       <span className="stations-count">{getOwnerStations(owner.id).length}</span>
                     </div>
-                    <p className="stations-list">
-                      {getOwnerStations(owner.id).length > 0 
-                        ? getOwnerStations(owner.id).map(s => s.name).join(', ')
-                        : 'Chưa có trạm sạc nào'
-                      }
-                    </p>
+                    <div className="stations-list">
+                      {getOwnerStations(owner.id).length > 0 ? (
+                        <div className="stations-grid">
+                          {getOwnerStations(owner.id).map((station, index) => (
+                            <button
+                              key={station.id || index}
+                              onClick={() => handleStationClick(station)}
+                              className="station-item"
+                              title="Click để xem chi tiết trạm sạc"
+                            >
+                              <Zap size={12} />
+                              {station.name || station.id}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        'Chưa có trạm sạc nào'
+                      )}
+                    </div>
                   </div>
                   
                   <div className="owner-actions">
@@ -605,6 +634,15 @@ const Owners = () => {
           />
         )}
       </div>
+
+      {/* Station Detail Modal */}
+      {showStationModal && selectedStation && (
+        <StationDetailModal
+          station={selectedStation}
+          isOpen={showStationModal}
+          onClose={handleCloseStationModal}
+        />
+      )}
     </div>
   );
 };

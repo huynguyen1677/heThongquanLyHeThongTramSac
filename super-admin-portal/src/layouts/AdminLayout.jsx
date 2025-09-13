@@ -1,21 +1,37 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { 
   BarChart3, 
   Users, 
   Zap, 
   FileText, 
   DollarSign, 
-  Shield, 
   ClipboardList, 
   Settings,
   LogOut,
-  Menu
+  Menu,
+  User,
+  Crown,
+  Shield
 } from 'lucide-react';
 import './AdminLayout.css';
 
 const AdminLayout = () => {
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const { logout, userProfile, currentUser } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      // Redirect được xử lý bởi AuthContext
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      setShowLogoutModal(false);
+    }
+  };
 
   const navigation = [
     {
@@ -49,10 +65,10 @@ const AdminLayout = () => {
       description: 'Chính sách giá mặc định'
     },
     {
-      name: 'Người Dùng & Quyền',
+      name: 'Người Dùng',
       href: '/users',
-      icon: Shield,
-      description: 'Quản lý người dùng và quyền hạn'
+      icon: Users,
+      description: 'Quản lý người dùng hệ thống'
     },
     {
       name: 'Nhật Ký Audit',
@@ -109,11 +125,67 @@ const AdminLayout = () => {
         </nav>
 
         <div className="sidebar-footer">
-          <button className="logout-btn">
+          {/* User Info */}
+          <div className="user-info">
+            <div className="user-avatar">
+              {userProfile?.role === 'super-admin' ? (
+                <Crown size={16} />
+              ) : userProfile?.role === 'admin' ? (
+                <Shield size={16} />
+              ) : (
+                <User size={16} />
+              )}
+            </div>
+            {sidebarOpen && (
+              <div className="user-details">
+                <div className="user-name">
+                  {userProfile?.name || currentUser?.displayName || 'Admin'}
+                </div>
+                <div className="user-role">
+                  {userProfile?.role === 'super-admin' ? 'Super Admin' : 'Admin'}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Logout Button */}
+          <button 
+            className="logout-btn"
+            onClick={() => setShowLogoutModal(true)}
+            title="Đăng xuất"
+          >
             <LogOut size={20} />
             {sidebarOpen && <span>Đăng Xuất</span>}
           </button>
         </div>
+
+        {/* Logout Confirmation Modal */}
+        {showLogoutModal && (
+          <div className="modal-overlay" onClick={() => setShowLogoutModal(false)}>
+            <div className="logout-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>Xác Nhận Đăng Xuất</h3>
+              </div>
+              <div className="modal-body">
+                <p>Bạn có chắc chắn muốn đăng xuất khỏi hệ thống?</p>
+              </div>
+              <div className="modal-actions">
+                <button 
+                  className="btn btn-secondary"
+                  onClick={() => setShowLogoutModal(false)}
+                >
+                  Hủy
+                </button>
+                <button 
+                  className="btn btn-danger"
+                  onClick={handleLogout}
+                >
+                  Đăng Xuất
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Main Content */}

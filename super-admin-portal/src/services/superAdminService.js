@@ -535,6 +535,63 @@ export class SuperAdminService extends BaseService {
       return this.handleError(error, 'Legacy CSV export');
     }
   }
+
+  // ===== USER MANAGEMENT =====
+  static async getAllUsers() {
+    try {
+      return await FirestoreService.getAll('users');
+    } catch (error) {
+      return this.handleError(error, 'Getting all users');
+    }
+  }
+
+  static async createUser(userData) {
+    try {
+      // Add default fields
+      const userToCreate = {
+        ...userData,
+        createdAt: new Date(),
+        status: userData.status || 'active',
+        role: userData.role || 'user'
+      };
+      
+      return await FirestoreService.create('users', userToCreate);
+    } catch (error) {
+      return this.handleError(error, 'Creating user');
+    }
+  }
+
+  static async updateUser(userId, userData) {
+    try {
+      const updateData = {
+        ...userData,
+        updatedAt: new Date()
+      };
+      
+      return await FirestoreService.update('users', userId, updateData);
+    } catch (error) {
+      return this.handleError(error, 'Updating user');
+    }
+  }
+
+  static async deleteUser(userId) {
+    try {
+      return await FirestoreService.delete('users', userId);
+    } catch (error) {
+      return this.handleError(error, 'Deleting user');
+    }
+  }
+
+  static async toggleUserStatus(userId, status) {
+    try {
+      return await FirestoreService.update('users', userId, {
+        status,
+        updatedAt: new Date()
+      });
+    } catch (error) {
+      return this.handleError(error, 'Toggling user status');
+    }
+  }
 }
 
 export default SuperAdminService;

@@ -18,6 +18,19 @@ export class AuthService {
       // Lấy thông tin owner từ Firestore
       const ownerData = await this.getOwnerProfile(user.uid);
       
+      // Kiểm tra role - chỉ cho phép owner đăng nhập
+      if (!ownerData || ownerData.role !== 'owner') {
+        // Đăng xuất ngay lập tức nếu không phải owner
+        await signOut(auth);
+        throw new Error('Bạn không có quyền truy cập vào hệ thống Owner Portal. Chỉ chủ trạm mới có thể đăng nhập.');
+      }
+
+      // Kiểm tra trạng thái active
+      if (!ownerData.active) {
+        await signOut(auth);
+        throw new Error('Tài khoản của bạn đã bị tạm khóa. Vui lòng liên hệ admin để biết thêm chi tiết.');
+      }
+      
       return {
         uid: user.uid,
         email: user.email,
@@ -43,13 +56,36 @@ export class AuthService {
   static onAuthStateChanged(callback) {
     return onAuthStateChanged(auth, async (user) => {
       if (user) {
-        // User is signed in
-        const ownerData = await this.getOwnerProfile(user.uid);
-        callback({
-          uid: user.uid,
-          email: user.email,
-          ...ownerData
-        });
+        try {
+          // User is signed in - kiểm tra quyền owner
+          const ownerData = await this.getOwnerProfile(user.uid);
+          
+          // Kiểm tra role - chỉ cho phép owner
+          if (!ownerData || ownerData.role !== 'owner') {
+            console.warn('User không có quyền owner, đăng xuất tự động');
+            await signOut(auth);
+            callback(null);
+            return;
+          }
+
+          // Kiểm tra trạng thái active
+          if (!ownerData.active) {
+            console.warn('Tài khoản owner bị khóa, đăng xuất tự động');
+            await signOut(auth);
+            callback(null);
+            return;
+          }
+
+          callback({
+            uid: user.uid,
+            email: user.email,
+            ...ownerData
+          });
+        } catch (error) {
+          console.error('Error in auth state change:', error);
+          await signOut(auth);
+          callback(null);
+        }
       } else {
         // User is signed out
         callback(null);
@@ -64,41 +100,32 @@ export class AuthService {
       const ownerSnap = await getDoc(ownerRef);
       
       if (ownerSnap.exists()) {
-        return ownerSnap.data();
-      } else {
-        // Nếu chưa có profile, tạo profile mặc định
-        const defaultProfile = {
-          ownerId: `OWNER_${uid.substring(0, 8)}`,
-          name: '',
-          phone: '',
-          address: '',
-          role: 'owner',
-          active: true,
-          createdAt: new Date().toISOString()
-        };
+        const userData = ownerSnap.data();
         
-        await setDoc(ownerRef, defaultProfile);
-        return defaultProfile;
+        // Chỉ trả về dữ liệu nếu là owner
+        if (userData.role === 'owner') {
+          return userData;
+        } else {
+          console.warn(`User ${uid} có role '${userData.role}', không phải owner`);
+          return null;
+        }
+      } else {
+        console.warn(`Không tìm thấy profile cho user ${uid}`);
+        return null;
       }
     } catch (error) {
       console.error('Error getting owner profile:', error);
-      return {
-        ownerId: `OWNER_${uid.substring(0, 8)}`,
-        name: '',
-        phone: '',
-        address: '',
-        role: 'owner',
-        active: true
-      };
+      return null;
     }
   }
 
   // Cập nhật thông tin owner
   static async updateOwnerProfile(uid, profileData) {
     try {
-      const ownerRef = doc(db, 'owners', uid);
+      const ownerRef = doc(db, 'users', uid);
       const updateData = {
         ...profileData,
+        role: 'owner', // Đảm bảo role luôn là owner
         updatedAt: new Date().toISOString()
       };
       
@@ -127,7 +154,7 @@ export class AuthService {
         createdAt: new Date().toISOString()
       };
       
-      await setDoc(doc(db, 'owners', user.uid), ownerProfile);
+      await setDoc(doc(db, 'users', user.uid), ownerProfile);
       
       return {
         uid: user.uid,
@@ -153,6 +180,11 @@ export class AuthService {
       'auth/weak-password': 'Mật khẩu quá yếu (tối thiểu 6 ký tự)',
       'auth/invalid-credential': 'Thông tin đăng nhập không đúng'
     };
+    
+    // Nếu error là string thì trả về trực tiếp
+    if (typeof errorCode === 'string' && !errorCode.startsWith('auth/')) {
+      return new Error(errorCode);
+    }
     
     return new Error(errorMessages[errorCode] || 'Có lỗi xảy ra khi đăng nhập');
   }
