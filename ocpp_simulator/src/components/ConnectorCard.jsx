@@ -10,9 +10,19 @@ const INITIAL_STATS = {
   duration: '00:00:00',
   estimatedCost: 0,
   isRunning: false,
-  fullChargeThresholdKwh: 2,
+  fullChargeThresholdKwh: 37.23, // VF5 Plus mặc định
   pricePerKwh: 0,
   idTag: null
+};
+
+// Cấu hình xe VinFast
+// Cấu hình xe VinFast
+const VINFAST_CARS = {
+  VF5: { name: 'VF5 Plus', batteryCapacity: 37.23, fastCharging: 30, normalCharging: 22 },
+  VFe34: { name: 'VF e34', batteryCapacity: 42, fastCharging: 30, normalCharging: 22 },
+  VF6: { name: 'VF6', batteryCapacity: 59.6, fastCharging: 30, normalCharging: 22 },
+  VF7: { name: 'VF7 Plus', batteryCapacity: 75.3, fastCharging: 30, normalCharging: 22 },
+  VF8: { name: 'VF8', batteryCapacity: 88.8, fastCharging: 30, normalCharging: 22 }
 };
 
 const ConnectorCard = ({
@@ -27,8 +37,9 @@ const ConnectorCard = ({
   performSafetyCheck,
   disabled = false
 }) => {
-  const [powerKw, setPowerKw] = useState(11);
+  const [powerKw, setPowerKw] = useState(22); // Sạc thường mặc định
   const [stats, setStats] = useState(INITIAL_STATS);
+  const [selectedCar, setSelectedCar] = useState('VF5'); // Xe mặc định
 
   // Error modal state
   const [errorModal, setErrorModal] = useState({
@@ -289,7 +300,7 @@ const ConnectorCard = ({
   };
 
   const handlePowerChange = (newPower) => {
-    const validPower = Math.max(3.5, Math.min(15, newPower));
+    const validPower = Math.max(3.5, Math.min(30, newPower)); // Tăng max lên 30kW
     setPowerKw(validPower);
     
     if (meterService && typeof meterService.setPower === 'function' && meterService.isActive()) {
@@ -298,6 +309,29 @@ const ConnectorCard = ({
         console.log(`⚡ [ConnectorCard-${connectorId}] Power updated to ${validPower}kW`);
       } catch (error) {
         console.warn(`⚠️ [ConnectorCard-${connectorId}] Error setting power:`, error);
+      }
+    }
+  };
+
+  const handleCarSelection = (carType) => {
+    const car = VINFAST_CARS[carType];
+    if (car) {
+      setSelectedCar(carType);
+      
+      // Cập nhật ngưỡng sạc đầy theo dung lượng pin xe
+      setStats(prev => ({
+        ...prev,
+        fullChargeThresholdKwh: car.batteryCapacity
+      }));
+      
+      // Cập nhật meter service nếu có
+      if (meterService && typeof meterService.setFullChargeThreshold === 'function') {
+        try {
+          meterService.setFullChargeThreshold(car.batteryCapacity);
+          console.log(`🚗 [ConnectorCard-${connectorId}] Selected ${car.name} - Battery: ${car.batteryCapacity}kWh`);
+        } catch (error) {
+          console.warn(`⚠️ [ConnectorCard-${connectorId}] Error setting charge threshold:`, error);
+        }
       }
     }
   };
@@ -410,7 +444,7 @@ const ConnectorCard = ({
       {status === 'FullyCharged' && (
         <div className="full-charged-notice">
           <span role="img" aria-label="full">🔋</span>
-          <b>Xe đã sạc đầy!</b>
+          <b>Xe {VINFAST_CARS[selectedCar].name} đã sạc đầy!</b>
         </div>
       )}
 
@@ -439,32 +473,54 @@ const ConnectorCard = ({
       {/* Control Section */}
       {isConnected && !disabled && (
         <div className="control-section">
+          {/* Car Selection Section */}
+          <div className="car-selection">
+            <h4>🚗 Chọn loại xe VinFast</h4>
+            <div className="car-buttons">
+              {Object.entries(VINFAST_CARS).map(([key, car]) => (
+                <button
+                  key={key}
+                  className={`btn btn-small ${selectedCar === key ? 'btn-success' : 'btn-secondary'}`}
+                  onClick={() => handleCarSelection(key)}
+                  disabled={status === 'Charging'}
+                  style={{ margin: '2px' }}
+                >
+                  {car.name} ({car.batteryCapacity}kWh)
+                </button>
+              ))}
+            </div>
+            <p className="car-info">
+              Xe được chọn: <strong>{VINFAST_CARS[selectedCar].name}</strong> - 
+              Dung lượng pin: <strong>{VINFAST_CARS[selectedCar].batteryCapacity} kWh</strong>
+            </p>
+          </div>
+          
           <div className="power-control">
-            <label>Công suất (kW):</label>
+            <label>Công suất sạc (kW):</label>
             <input
               type="number"
               value={powerKw}
               onChange={(e) => handlePowerChange(parseFloat(e.target.value) || 3.5)}
               min="3.5"
-              max="15"
+              max="30"
               step="0.5"
               disabled={status === 'Charging'}
             />
             <button
               className="btn btn-small"
-              onClick={() => handlePowerChange(3.5)}
+              onClick={() => handlePowerChange(VINFAST_CARS[selectedCar].normalCharging)}
               disabled={status === 'Charging'}
               style={{ marginLeft: 8 }}
             >
-              Sạc chậm
+              Sạc thường ({VINFAST_CARS[selectedCar].normalCharging}kW)
             </button>
             <button
               className="btn btn-small"
-              onClick={() => handlePowerChange(11)}
+              onClick={() => handlePowerChange(VINFAST_CARS[selectedCar].fastCharging)}
               disabled={status === 'Charging'}
               style={{ marginLeft: 4 }}
             >
-              Sạc nhanh
+              Sạc nhanh ({VINFAST_CARS[selectedCar].fastCharging}kW)
             </button>
           </div>
           
@@ -560,19 +616,24 @@ const ConnectorCard = ({
             <div
               className="charging-progress"
               style={{
-                width: `${Math.min((stats.energyKwh || 0) / (stats.fullChargeThresholdKwh || 2) * 100, 100)}%`,
+                width: `${Math.min((stats.energyKwh || 0) / (stats.fullChargeThresholdKwh || VINFAST_CARS[selectedCar].batteryCapacity) * 100, 100)}%`,
                 background: status === 'FullyCharged' ? '#38b2ac' : '#2563eb'
               }}
             ></div>
           </div>
           
           <div className="charging-progress-label">
-            Đã sạc: <b>{(stats.energyKwh || 0).toFixed(2)} kWh</b> / <b>{stats.fullChargeThresholdKwh || 2} kWh</b>
-            ({Math.min((stats.energyKwh || 0) / (stats.fullChargeThresholdKwh || 2) * 100, 100).toFixed(1)}%)
+            Đã sạc: <b>{(stats.energyKwh || 0).toFixed(2)} kWh</b> / <b>{stats.fullChargeThresholdKwh || VINFAST_CARS[selectedCar].batteryCapacity} kWh</b>
+            ({Math.min((stats.energyKwh || 0) / (stats.fullChargeThresholdKwh || VINFAST_CARS[selectedCar].batteryCapacity) * 100, 100).toFixed(1)}%)
           </div>
           
           <div className="charging-time-label">
             Thời gian sạc: <b>{(stats && stats.duration) ? stats.duration : '00:00:00'}</b>
+          </div>
+          
+          <div className="car-info-charging">
+            <span className="charging-detail-label">Xe đang sạc:</span>
+            <span className="charging-detail-value">{VINFAST_CARS[selectedCar].name} - {VINFAST_CARS[selectedCar].batteryCapacity} kWh</span>
           </div>
           
           <div className="charging-details-grid">

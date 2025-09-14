@@ -1,5 +1,5 @@
 export class ChargingStateManager {
-  constructor(fullChargeThresholdKwh = 2) {
+  constructor(fullChargeThresholdKwh = 37.23) { // VF5 Plus mặc định
     this.fullChargeThresholdKwh = fullChargeThresholdKwh;
     this.energyKwh = 0;
     this.currentPowerKw = 0;

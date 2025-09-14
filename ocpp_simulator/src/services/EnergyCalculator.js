@@ -13,20 +13,29 @@ export class EnergyCalculator {
    * @returns {number} - Công suất hiện tại (kW)
    */
   calculateCurrentPowerKw(chargingTimeMinutes, basePowerKw = this.basePowerKw) {
-    // Mô phỏng công suất giảm dần theo thời gian (curve charging)
+    // Mô phỏng công suất giảm dần và biến động
     const timeHours = chargingTimeMinutes / 60;
-    
+    let power;
+
     if (timeHours < 0.5) {
-      // 30 phút đầu: công suất full
-      return basePowerKw;
+      // 30 phút đầu: công suất gần như tối đa
+      power = basePowerKw;
     } else if (timeHours < 1.5) {
-      // Từ 30-90 phút: giảm dần xuống 80%
-      const reductionFactor = 1 - (timeHours - 0.5) * 0.2;
-      return basePowerKw * Math.max(reductionFactor, 0.8);
+      // Từ 30-90 phút: giảm dần tuyến tính xuống 80%
+      const reductionFactor = 1 - (timeHours - 0.5) * 0.2; // Giảm từ 1 xuống 0.8
+      power = basePowerKw * reductionFactor;
     } else {
-      // Sau 90 phút: duy trì 80% công suất
-      return basePowerKw * 0.8;
+      // Sau 90 phút: duy trì ở 80%
+      power = basePowerKw * 0.8;
     }
+
+    // Thêm một chút biến động ngẫu nhiên để mô phỏng thực tế
+    // Giao động trong khoảng +/- 5% của công suất hiện tại
+    const fluctuation = (Math.random() - 0.5) * 0.1 * power; // +/- 5%
+    const finalPower = power + fluctuation;
+
+    // Đảm bảo công suất không bao giờ âm hoặc vượt quá công suất gốc
+    return Math.max(0, Math.min(finalPower, basePowerKw));
   }
 
   /**

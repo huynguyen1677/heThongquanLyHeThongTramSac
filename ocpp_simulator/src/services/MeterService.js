@@ -272,6 +272,20 @@ export class MeterService {
   /**
    * Các helper methods
    */
+  setFullChargeThreshold(thresholdKwh) {
+    try {
+      if (this.stateManager && typeof this.stateManager.setFullChargeThreshold === 'function') {
+        this.stateManager.setFullChargeThreshold(thresholdKwh);
+        console.log(`🔋 [MeterService-${this.connectorId}] Full charge threshold set to ${thresholdKwh}kWh`);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      this.log(`Error setting full charge threshold: ${error.message}`, 'error');
+      return false;
+    }
+  }
+
   getEnergyConsumed() {
     try {
       return this.energyCalculator.whToKwh(this.currentMeterValue - this.meterStart);
