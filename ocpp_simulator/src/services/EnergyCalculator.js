@@ -15,18 +15,25 @@ export class EnergyCalculator {
   calculateCurrentPowerKw(chargingTimeMinutes, basePowerKw = this.basePowerKw) {
     // Mô phỏng công suất giảm dần theo thời gian (curve charging)
     const timeHours = chargingTimeMinutes / 60;
-    
+    let targetPower;
+
     if (timeHours < 0.5) {
       // 30 phút đầu: công suất full
-      return basePowerKw;
+      targetPower = basePowerKw;
     } else if (timeHours < 1.5) {
       // Từ 30-90 phút: giảm dần xuống 80%
       const reductionFactor = 1 - (timeHours - 0.5) * 0.2;
-      return basePowerKw * Math.max(reductionFactor, 0.8);
+      targetPower = basePowerKw * Math.max(reductionFactor, 0.8);
     } else {
       // Sau 90 phút: duy trì 80% công suất
-      return basePowerKw * 0.8;
+      targetPower = basePowerKw * 0.8;
     }
+
+    // Thêm dao động ngẫu nhiên để mô phỏng biến thiên công suất thực tế
+    const jitter = Math.random() * 4 - 2; // -2 đến +2 kW
+    const power = Math.min(basePowerKw, Math.max(0, targetPower + jitter));
+
+    return Math.round(power * 100) / 100;
   }
 
   /**
