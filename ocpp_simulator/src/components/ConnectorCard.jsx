@@ -2,6 +2,14 @@ import { useState, useEffect } from 'react';
 import ErrorModal from './ErrorModal';
 import './ConnectorCard.css';
 
+const VEHICLES = [
+  { name: 'VF5 Plus', capacity: 37.23 },
+  { name: 'VF e34', capacity: 42 },
+  { name: 'VF6', capacity: 59.6 },
+  { name: 'VF7 Plus', capacity: 75.3 },
+  { name: 'VF8', capacity: 88.8 }
+];
+
 const INITIAL_STATS = {
   transactionId: null,
   currentMeterValue: 0,
@@ -10,7 +18,7 @@ const INITIAL_STATS = {
   duration: '00:00:00',
   estimatedCost: 0,
   isRunning: false,
-  fullChargeThresholdKwh: 2,
+  fullChargeThresholdKwh: 37.23,
   pricePerKwh: 0,
   idTag: null
 };
@@ -27,8 +35,9 @@ const ConnectorCard = ({
   performSafetyCheck,
   disabled = false
 }) => {
-  const [powerKw, setPowerKw] = useState(11);
+  const [powerKw, setPowerKw] = useState(30);
   const [stats, setStats] = useState(INITIAL_STATS);
+  const [selectedVehicle, setSelectedVehicle] = useState(VEHICLES[0]);
 
   // Error modal state
   const [errorModal, setErrorModal] = useState({
@@ -96,9 +105,12 @@ const ConnectorCard = ({
   // Reset stats when no transaction
   useEffect(() => {
     if (!transactionId) {
-      setStats(INITIAL_STATS);
+      setStats({ ...INITIAL_STATS, fullChargeThresholdKwh: selectedVehicle.capacity });
+      if (meterService?.stateManager) {
+        meterService.stateManager.setFullChargeThreshold(selectedVehicle.capacity);
+      }
     }
-  }, [transactionId]);
+  }, [transactionId, selectedVehicle, meterService]);
 
   // Safety check completion effect
   useEffect(() => {
@@ -289,7 +301,7 @@ const ConnectorCard = ({
   };
 
   const handlePowerChange = (newPower) => {
-    const validPower = Math.max(3.5, Math.min(15, newPower));
+    const validPower = Math.max(22, Math.min(30, newPower));
     setPowerKw(validPower);
     
     if (meterService && typeof meterService.setPower === 'function' && meterService.isActive()) {
@@ -300,6 +312,14 @@ const ConnectorCard = ({
         console.warn(`⚠️ [ConnectorCard-${connectorId}] Error setting power:`, error);
       }
     }
+  };
+
+  const handleVehicleSelect = (vehicle) => {
+    setSelectedVehicle(vehicle);
+    if (meterService?.stateManager) {
+      meterService.stateManager.setFullChargeThreshold(vehicle.capacity);
+    }
+    setStats(prev => ({ ...prev, fullChargeThresholdKwh: vehicle.capacity }));
   };
 
   const handleStatusAction = async (newStatus) => {
@@ -439,28 +459,49 @@ const ConnectorCard = ({
       {/* Control Section */}
       {isConnected && !disabled && (
         <div className="control-section">
+          <div className="vehicle-control" style={{ marginBottom: 12 }}>
+            <label>Chọn xe:</label>
+            <div style={{ marginTop: 4, marginBottom: 4 }}>
+              {VEHICLES.map(vehicle => (
+                <button
+                  key={vehicle.name}
+                  className="btn btn-small"
+                  onClick={() => handleVehicleSelect(vehicle)}
+                  disabled={status === 'Charging'}
+                  style={{
+                    marginRight: 4,
+                    backgroundColor: selectedVehicle.name === vehicle.name ? '#007bff' : undefined,
+                    color: selectedVehicle.name === vehicle.name ? '#fff' : undefined
+                  }}
+                >
+                  {vehicle.name}
+                </button>
+              ))}
+            </div>
+            <div>Dung lượng pin: {selectedVehicle.capacity} kWh</div>
+          </div>
           <div className="power-control">
             <label>Công suất (kW):</label>
             <input
               type="number"
               value={powerKw}
-              onChange={(e) => handlePowerChange(parseFloat(e.target.value) || 3.5)}
-              min="3.5"
-              max="15"
-              step="0.5"
+              onChange={(e) => handlePowerChange(parseFloat(e.target.value) || 22)}
+              min="22"
+              max="30"
+              step="1"
               disabled={status === 'Charging'}
             />
             <button
               className="btn btn-small"
-              onClick={() => handlePowerChange(3.5)}
+              onClick={() => handlePowerChange(22)}
               disabled={status === 'Charging'}
               style={{ marginLeft: 8 }}
             >
-              Sạc chậm
+              Sạc thường
             </button>
             <button
               className="btn btn-small"
-              onClick={() => handlePowerChange(11)}
+              onClick={() => handlePowerChange(30)}
               disabled={status === 'Charging'}
               style={{ marginLeft: 4 }}
             >

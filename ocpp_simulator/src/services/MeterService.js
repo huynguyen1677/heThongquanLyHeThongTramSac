@@ -12,14 +12,14 @@ export class MeterService {
     this.energyCalculator = new EnergyCalculator();
     this.chargingTimer = new ChargingTimer(connectorId);
     this.pricingService = new PricingService();
-    this.stateManager = new ChargingStateManager();
+    this.stateManager = new ChargingStateManager(37.23);
 
     // Thông tin phiên sạc
     this.transactionId = null;
     this.idTag = null;
     this.meterStart = 0;
     this.currentMeterValue = 0;
-    this.basePowerKw = 11;
+    this.basePowerKw = 30;
     this.interval = 5000;
 
     // Callback để thông báo status change
@@ -31,7 +31,7 @@ export class MeterService {
   /**
    * Bắt đầu metering cho một transaction
    */
-  start(transactionId, meterStart, powerKw = 11, intervalSeconds = 2, idTag = null) {
+  start(transactionId, meterStart, powerKw = 30, intervalSeconds = 2, idTag = null) {
     try {
       if (this.chargingTimer.isActive()) {
         this.stop();
@@ -223,7 +223,7 @@ export class MeterService {
       duration: '00:00:00',
       estimatedCost: 0,
       isRunning: false,
-      fullChargeThresholdKwh: 2,
+      fullChargeThresholdKwh: 37.23,
       pricePerKwh: 0,
       idTag: null
     };
@@ -252,7 +252,7 @@ export class MeterService {
         duration: duration,
         estimatedCost: this.stateManager.getEstimatedCost() || 0,
         isRunning: this.isActive(),
-        fullChargeThresholdKwh: this.stateManager.getFullChargeThreshold() || 2,
+        fullChargeThresholdKwh: this.stateManager.getFullChargeThreshold() || 37.23,
         pricePerKwh: this.stateManager.getPricePerKwh() || 0,
         idTag: this.idTag
       };
