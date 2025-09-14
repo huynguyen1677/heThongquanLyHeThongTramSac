@@ -30,8 +30,10 @@ export class EnergyCalculator {
     }
 
     // Thêm dao động ngẫu nhiên để mô phỏng biến thiên công suất thực tế
+    // Cho phép công suất dao động trong khoảng ±2 kW quanh target power
     const jitter = Math.random() * 4 - 2; // -2 đến +2 kW
-    const power = Math.min(basePowerKw, Math.max(0, targetPower + jitter));
+    const maxPower = basePowerKw + 2; // giới hạn trên cho dao động
+    const power = Math.max(0, Math.min(maxPower, targetPower + jitter));
 
     return Math.round(power * 100) / 100;
   }
