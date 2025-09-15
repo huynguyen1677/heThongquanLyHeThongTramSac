@@ -301,7 +301,7 @@ const ConnectorCard = ({
   };
 
   const handlePowerChange = (newPower) => {
-    const validPower = Math.max(22, Math.min(30, newPower));
+    const validPower = Math.max(30, Math.min(50, newPower));
     setPowerKw(validPower);
     
     if (meterService && typeof meterService.setPower === 'function' && meterService.isActive()) {
@@ -485,15 +485,15 @@ const ConnectorCard = ({
             <input
               type="number"
               value={powerKw}
-              onChange={(e) => handlePowerChange(parseFloat(e.target.value) || 22)}
-              min="22"
-              max="30"
+              onChange={(e) => handlePowerChange(parseFloat(e.target.value) || 30)}
+              min="30"
+              max="50"
               step="1"
               disabled={status === 'Charging'}
             />
             <button
               className="btn btn-small"
-              onClick={() => handlePowerChange(22)}
+              onClick={() => handlePowerChange(30)}
               disabled={status === 'Charging'}
               style={{ marginLeft: 8 }}
             >
@@ -501,7 +501,7 @@ const ConnectorCard = ({
             </button>
             <button
               className="btn btn-small"
-              onClick={() => handlePowerChange(30)}
+              onClick={() => handlePowerChange(50)}
               disabled={status === 'Charging'}
               style={{ marginLeft: 4 }}
             >

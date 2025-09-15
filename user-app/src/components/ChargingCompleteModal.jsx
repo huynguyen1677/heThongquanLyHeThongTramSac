@@ -54,7 +54,7 @@ function ChargingCompleteModal({ session, open, onClose }) {
                 <i className="fas fa-bolt"></i>
               </div>
               <div className="stat-content">
-                <span className="stat-value">{session.currentEnergyKwh?.toFixed(1) || '0.0'}</span>
+                <span className="stat-value">{session.currentEnergyKwh|| '0.0'}</span>
                 <span className="stat-unit">kWh</span>
                 <span className="stat-label">Năng lượng</span>
               </div>

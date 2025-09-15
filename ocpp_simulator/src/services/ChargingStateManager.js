@@ -58,13 +58,7 @@ export class ChargingStateManager {
     this.isChargingComplete = this.energyKwh >= this.fullChargeThresholdKwh;
   }
 
-  /**
-   * Tính phần trăm sạc
-   */
-  getChargingPercentage(currentEnergyKwh = null) {
-    const energyToCheck = currentEnergyKwh !== null ? currentEnergyKwh : this.energyKwh;
-    return Math.min(100, (energyToCheck / this.fullChargeThresholdKwh) * 100);
-  }
+  // (removed) getChargingPercentage() was unused across the app
 
   /**
    * Reset trạng thái về ban đầu
@@ -74,11 +68,6 @@ export class ChargingStateManager {
     this.currentPowerKw = 0;
     this.estimatedCost = 0;
     this.isChargingComplete = false;
-  }
-
-  // Getter methods
-  getEnergyKwh() {
-    return this.energyKwh;
   }
 
   getCurrentPowerKw() {
@@ -91,9 +80,5 @@ export class ChargingStateManager {
 
   getPricePerKwh() {
     return this.pricePerKwh;
-  }
-
-  getIsFullyCharged() {
-    return this.isChargingComplete;
   }
 }

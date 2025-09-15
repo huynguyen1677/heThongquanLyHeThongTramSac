@@ -228,6 +228,7 @@ function Home() {
             <div className="stat-icon icon-bg-green">
               <i className="fas fa-wallet"></i>
             </div>
+            
           </div>
         </div>
         
@@ -380,7 +381,7 @@ function Home() {
               <div className="detail-content">
                 <span className="detail-label">Năng lượng đã sạc</span>
                 <span className="detail-value">
-                  {currentCharging.currentEnergyKwh.toFixed(2)} / {currentCharging.fullChargeThresholdKwh} kWh
+                  {currentCharging.currentEnergyKwh} / {currentCharging.fullChargeThresholdKwh} kWh
                 </span>
               </div>
             </div>
@@ -394,6 +395,41 @@ function Home() {
                 <span className="detail-value">{currentCharging.estimatedCost.toLocaleString('vi-VN')}₫</span>
               </div>
             </div>
+
+            {(() => {
+              const total = Number(currentCharging.fullChargeThresholdKwh) || 0;
+              const current = Number(currentCharging.currentEnergyKwh) || 0;
+              const remainingKwh = Math.max(total - current, 0);
+              const powerKw = Number.parseFloat(String(currentCharging.power ?? '').replace(',', '.')) || 0;
+              if (total <= 0) return null;
+
+              let valueText = '—';
+              if (remainingKwh === 0) {
+                valueText = 'Sắp xong';
+              } else if (powerKw > 0) {
+                const minutes = Math.ceil((remainingKwh / powerKw) * 60);
+                const hours = Math.floor(minutes / 60);
+                const remM = minutes % 60;
+                const dur = hours > 0 ? `≈ ${hours} giờ${remM > 0 ? ` ${remM} phút` : ''}` : `≈ ${minutes} phút`;
+                const etaDate = new Date(Date.now() + minutes * 60 * 1000);
+                const timeText = etaDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+                valueText = `${timeText} (${dur})`;
+              } else {
+                valueText = 'Đang tạm dừng';
+              }
+
+              return (
+                <div className="detail-card">
+                  <div className="detail-icon">
+                    <i className="fas fa-hourglass-half"></i>
+                  </div>
+                  <div className="detail-content">
+                    <span className="detail-label">Ước tính hoàn thành</span>
+                    <span className="detail-value">{valueText}</span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="charging-progress-modern">
