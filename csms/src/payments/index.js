@@ -11,6 +11,9 @@ export { CostCalculator } from './costCalculator.js';
 // Balance management
 export { BalanceUpdater } from './balanceUpdater.js';
 
+// Revenue sharing
+export { RevenueSharing } from './revenueSharing.js';
+
 // Transaction handling
 export { handleStopTransaction } from './paymentService.js';
 
@@ -37,6 +40,7 @@ export default {
   PaymentProcessor,
   CostCalculator,
   BalanceUpdater,
+  RevenueSharing,
   processChargingSessionPayment,
   processRefund,
   checkUserBalance

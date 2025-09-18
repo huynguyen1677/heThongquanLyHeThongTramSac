@@ -14,6 +14,7 @@ import {
 import { Bar, Line, Doughnut } from 'react-chartjs-2';
 import { Calendar, TrendingUp, DollarSign, Zap, Users, MapPin } from 'lucide-react';
 import DashboardService from '../services/dashboardService';
+import AuthService from '../services/auth';
 
 // Register Chart.js components
 ChartJS.register(
@@ -51,12 +52,39 @@ const Dashboard = ({ ownerId }) => {
   const [timeRange, setTimeRange] = useState('month');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [ownerWallet, setOwnerWallet] = useState(0);
 
   useEffect(() => {
     if (ownerId) {
       loadDashboardData();
     }
   }, [ownerId, timeRange, selectedMonth, selectedYear]);
+
+  // Load owner wallet balance
+  useEffect(() => {
+    const loadOwnerWallet = async () => {
+      try {
+        console.log('🔄 [Dashboard] Loading owner wallet...');
+        const currentUser = AuthService.getCurrentUser();
+        console.log('👤 [Dashboard] Current user:', currentUser?.uid || 'No user');
+        
+        if (currentUser) {
+          const ownerProfile = await AuthService.getOwnerProfile(currentUser.uid);
+          console.log('👑 [Dashboard] Owner profile:', ownerProfile);
+          console.log('💰 [Dashboard] Wallet balance:', ownerProfile?.walletBalance);
+          
+          const walletAmount = ownerProfile?.walletBalance || 0;
+          setOwnerWallet(walletAmount);
+          console.log('✅ [Dashboard] Wallet set to:', walletAmount);
+        } else {
+          console.warn('❌ [Dashboard] No current user found');
+        }
+      } catch (error) {
+        console.error('❌ [Dashboard] Error loading owner wallet:', error);
+      }
+    };
+    loadOwnerWallet();
+  }, []);
 
   const loadDashboardData = async () => {
     if (!ownerId) {
@@ -401,6 +429,10 @@ const Dashboard = ({ ownerId }) => {
                   <TrendingUp size={14} style={{ display: 'inline', marginRight: '0.25rem' }} />
                   {revenueChange >= 0 ? '+' : ''}{revenueChange}% so với kỳ trước
                 </p>
+                <p style={{ color: '#0ea5e9', fontSize: '0.75rem', fontWeight: '500', margin: '4px 0 0 0' }}>
+                  Số dư ví: {formatCurrency(ownerWallet)}
+                </p>
+                
               </div>
               <div style={{ 
                 background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', 

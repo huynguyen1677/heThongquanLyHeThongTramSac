@@ -298,6 +298,7 @@ const StationDashboard = ({ station, onClose }) => {
                       {formatCurrency(dashboardData.totalRevenue)}
                     </div>
                     <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>Tổng doanh thu</div>
+
                   </div>
                 </div>
 

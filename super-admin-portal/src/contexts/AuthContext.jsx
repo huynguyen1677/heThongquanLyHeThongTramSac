@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../services/firebase';
 import AuthService from '../services/AuthService';
+import { Wallet } from 'lucide-react';
 
 const AuthContext = createContext();
 
@@ -116,7 +117,8 @@ export const AuthProvider = ({ children }) => {
     logout,
     isAuthenticated: !!currentUser,
     isAdmin: userProfile?.role === 'admin' || userProfile?.role === 'super-admin',
-    isSuperAdmin: userProfile?.role === 'super-admin'
+    isSuperAdmin: userProfile?.role === 'super-admin',
+    walletBalance: userProfile?.walletBalance,
   };
 
   return (

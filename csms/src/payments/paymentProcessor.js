@@ -1,5 +1,6 @@
 import { CostCalculator } from './costCalculator.js';
 import { BalanceUpdater } from './balanceUpdater.js';
+import { RevenueSharing } from './revenueSharing.js';
 import { UserModel } from '../models/user.js';
 import { TransactionModel } from '../models/transaction.js';
 import { logger } from '../utils/logger.js';
@@ -61,14 +62,41 @@ export class PaymentProcessor {
         costBreakdown: costResult
       });
 
-      // Bước 7: Cập nhật trạng thái transaction (tạm bỏ qua để test)
+      // Bước 7: Xử lý chia sẻ doanh thu (Revenue Sharing)
+      let revenueSharingResult = null;
+      try {
+        revenueSharingResult = await RevenueSharing.processRevenueSharing({
+          totalAmount: costResult.totalCost,
+          stationId,
+          transactionId,
+          userId,
+          sessionDetails: {
+            sessionId,
+            connectorId,
+            energyConsumed,
+            duration,
+            costBreakdown: costResult
+          }
+        });
+        
+        logger.info('✅ Revenue sharing completed:', {
+          ownerAmount: revenueSharingResult.revenueSharing.owner.amount,
+          commissionAmount: revenueSharingResult.revenueSharing.superAdmin.amount
+        });
+      } catch (revenueSharingError) {
+        logger.error('❌ Revenue sharing failed:', revenueSharingError);
+        // Không throw error vì thanh toán của user đã thành công
+        // Chỉ log lỗi để xử lý sau
+      }
+
+      // Bước 8: Cập nhật trạng thái transaction (tạm bỏ qua để test)
       try {
         await this.updateTransactionStatus(transactionId, paymentResult, costResult);
       } catch (updateError) {
         logger.warn(`⚠️ Could not update transaction status, but payment succeeded:`, updateError.message);
       }
 
-      // Bước 8: Tạo kết quả cuối cùng
+      // Bước 9: Tạo kết quả cuối cùng
       const finalResult = {
         success: true,
         userId,
@@ -76,6 +104,7 @@ export class PaymentProcessor {
         sessionId,
         costCalculation: costResult,
         payment: paymentResult,
+        revenueSharing: revenueSharingResult,
         processingTime: Date.now() - startTime,
         completedAt: new Date().toISOString(),
         message: 'Session payment processed successfully'

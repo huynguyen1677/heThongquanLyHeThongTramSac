@@ -15,6 +15,7 @@ import { Bar, Line, Doughnut } from 'react-chartjs-2';
 import { Zap, Activity, DollarSign, AlertTriangle, TrendingUp, Battery, Clock, Eye, Download } from 'lucide-react';
 import FirestoreService from '../../services/FirestoreService';
 import RealtimeService from '../../services/RealtimeService';
+import AuthService from '../../services/AuthService';
 import './SystemDashboard.css';
 
 // Register Chart.js components
@@ -48,6 +49,7 @@ const SystemDashboard = ({ timeRange = 'today', onDataLoad = null }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(new Date());
+  const [adminWallet, setAdminWallet] = useState(0);
 
   const getDateRange = (range) => {
     const now = new Date();
@@ -407,25 +409,34 @@ const SystemDashboard = ({ timeRange = 'today', onDataLoad = null }) => {
       // Get date range based on timeRange
       const { startDate, endDate } = getDateRange(timeRange);
       
+      // Get current user and admin wallet balance
+      const currentUser = AuthService.getCurrentUser();
+      
       // Load data from multiple sources - try different payment collections
-      const [stations, payments, sessions, realtimeData] = await Promise.allSettled([
+      const [stations, payments, sessions, realtimeData, adminProfile] = await Promise.allSettled([
         FirestoreService.getAllStations(),
         FirestoreService.getPaymentsInRange(startDate, endDate),
         FirestoreService.getSessionsInRange(startDate, endDate),
-        RealtimeService.getRealtimeStations()
+        RealtimeService.getRealtimeStations(),
+        currentUser ? AuthService.getUserProfile(currentUser.uid) : Promise.resolve(null)
       ]);
 
       console.log('🔍 Data loading results:', {
         stations: stations.status,
         payments: payments.status,
         sessions: sessions.status,
-        realtimeData: realtimeData.status
+        realtimeData: realtimeData.status,
+        adminProfile: adminProfile.status
       });
 
       const stationsData = stations.status === 'fulfilled' ? stations.value : [];
       const paymentsData = payments.status === 'fulfilled' ? payments.value : [];
       const sessionsData = sessions.status === 'fulfilled' ? sessions.value : [];
       const realtimeDataValue = realtimeData.status === 'fulfilled' ? realtimeData.value : {};
+      const adminProfileData = adminProfile.status === 'fulfilled' ? adminProfile.value : null;
+
+      // Update admin wallet balance
+      setAdminWallet(adminProfileData?.walletBalance || 0);
 
       // Combine payment and session data for comprehensive metrics
       const combinedData = [...paymentsData];
@@ -454,6 +465,9 @@ const SystemDashboard = ({ timeRange = 'today', onDataLoad = null }) => {
       }
       if (realtimeData.status === 'rejected') {
         console.error('❌ Realtime data loading failed:', realtimeData.reason);
+      }
+      if (adminProfile.status === 'rejected') {
+        console.error('❌ Admin profile loading failed:', adminProfile.reason);
       }
 
       console.log('📊 Raw data loaded:', {
@@ -708,6 +722,9 @@ const SystemDashboard = ({ timeRange = 'today', onDataLoad = null }) => {
             <h3>Tổng Doanh Thu</h3>
             <p className="metric-value">{formatCurrency(dashboardData.overview.totalRevenue)}</p>
             <span className="metric-label">{dashboardData.overview.totalSessions} giao dịch</span>
+            <span className="metric-label" style={{ color: '#0ea5e9', fontWeight: 500, display: 'block', marginTop: '4px' }}>
+              Số dư ví : {formatCurrency(adminWallet)}
+            </span>
           </div>
         </div>
 

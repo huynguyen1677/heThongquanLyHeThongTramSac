@@ -178,6 +178,128 @@ export class UserModel {
       throw error;
     }
   }
+
+  /**
+   * Tìm user theo role
+   * @param {string} role - Role của user (vd: "owner", "super-admin", "user")
+   * @returns {Array} Danh sách users có role đó
+   */
+  static async getUsersByRole(role) {
+    try {
+      if (!firestoreService.isAvailable()) {
+        logger.warn('Firestore not available for getUsersByRole');
+        return [];
+      }
+
+      const usersRef = firestoreService.db.collection('users');
+      const query = usersRef.where('role', '==', role);
+      const snapshot = await query.get();
+      
+      const users = [];
+      snapshot.forEach(doc => {
+        const userData = doc.data();
+        users.push({
+          id: doc.id,
+          ...userData
+        });
+      });
+
+      logger.debug(`Found ${users.length} users with role: ${role}`);
+      return users;
+    } catch (error) {
+      logger.error(`Error getting users by role ${role}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Tìm user đầu tiên có role cụ thể
+   * @param {string} role - Role của user
+   * @returns {Object|null} User object hoặc null
+   */
+  static async getFirstUserByRole(role) {
+    try {
+      if (!firestoreService.isAvailable()) {
+        logger.warn('Firestore not available for getFirstUserByRole');
+        return null;
+      }
+
+      const usersRef = firestoreService.db.collection('users');
+      const query = usersRef.where('role', '==', role).limit(1);
+      const snapshot = await query.get();
+      
+      if (snapshot.empty) {
+        logger.warn(`No user found with role: ${role}`);
+        return null;
+      }
+
+      const doc = snapshot.docs[0];
+      const userData = doc.data();
+      
+      logger.debug(`Found user with role ${role}: ${userData.userId || doc.id}`);
+      return {
+        id: doc.id,
+        ...userData
+      };
+    } catch (error) {
+      logger.error(`Error getting first user by role ${role}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Kiểm tra user có role cụ thể không
+   * @param {string} userId - ID của user
+   * @param {string} expectedRole - Role cần kiểm tra
+   * @returns {boolean} True nếu user có role đó
+   */
+  static async hasRole(userId, expectedRole) {
+    try {
+      const user = await this.getUserById(userId);
+      if (!user) {
+        return false;
+      }
+
+      return user.role === expectedRole;
+    } catch (error) {
+      logger.error(`Error checking role for user ${userId}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Cập nhật role của user
+   * @param {string} userId - ID của user
+   * @param {string} newRole - Role mới
+   * @returns {boolean} Thành công hay không
+   */
+  static async updateUserRole(userId, newRole) {
+    try {
+      if (!firestoreService.isAvailable()) {
+        logger.warn('Firestore not available for updateUserRole');
+        return false;
+      }
+
+      // Tìm user để lấy document ID thực tế
+      const user = await this.getUserById(userId);
+      if (!user) {
+        throw new Error(`User not found: ${userId}`);
+      }
+
+      const userRef = firestoreService.db.collection('users').doc(user.id);
+      await userRef.update({
+        role: newRole,
+        roleUpdatedAt: new Date().toISOString(),
+        lastUpdated: new Date().toISOString()
+      });
+      
+      logger.info(`User role updated: ${userId} (${user.id}) -> ${newRole}`);
+      return true;
+    } catch (error) {
+      logger.error(`Error updating user role ${userId}:`, error);
+      throw error;
+    }
+  }
 }
 
 export default UserModel;
