@@ -39,8 +39,8 @@ export class AuthGuard {
       };
     }
 
-    // Kiểm tra trạng thái active
-    if (!user.active) {
+    // Kiểm tra trạng thái active/inactive
+    if (user.status === 'inactive') {
       return {
         allowed: false,
         reason: 'Tài khoản của bạn đã bị tạm khóa. Vui lòng liên hệ admin để biết thêm chi tiết.'

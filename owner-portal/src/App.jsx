@@ -126,7 +126,7 @@ function App() {
                 fontWeight: activeTab === 'dashboard' ? '600' : '400'
               }}
             >
-              📊 Thống kê & Dashboard
+              Thống kê & Dashboard
             </button>
           </nav>
         </div>

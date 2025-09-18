@@ -8,6 +8,7 @@ import Setup from './pages/Setup';
 import Overview from './pages/Overview';
 import Owners from './pages/Owners';
 import Users from './pages/Users';
+import PricingTemplate from './pages/PricingTemplate';
 import './App.css';
 
 function App() {
@@ -31,7 +32,7 @@ function App() {
               <Route path="owners" element={<Owners />} />
               <Route path="stations" element={<div>Trạm Sạc - Sắp Ra Mắt</div>} />
               <Route path="sessions" element={<div>Phiên Sạc - Sắp Ra Mắt</div>} />
-              <Route path="pricing" element={<div>Mẫu Giá - Sắp Ra Mắt</div>} />
+              <Route path="pricing" element={<PricingTemplate />} />
               <Route path="users" element={<Users />} />
               <Route path="audits" element={<div>Nhật Ký Audit - Sắp Ra Mắt</div>} />
               <Route path="settings" element={<div>Cài Đặt - Sắp Ra Mắt</div>} />

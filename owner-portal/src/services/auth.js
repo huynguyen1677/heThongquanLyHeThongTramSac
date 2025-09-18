@@ -26,7 +26,7 @@ export class AuthService {
       }
 
       // Kiểm tra trạng thái active
-      if (!ownerData.active) {
+      if (!ownerData.active || ownerData.status === 'inactive') {
         await signOut(auth);
         throw new Error('Tài khoản của bạn đã bị tạm khóa. Vui lòng liên hệ admin để biết thêm chi tiết.');
       }
@@ -38,6 +38,13 @@ export class AuthService {
       };
     } catch (error) {
       console.error('Sign in error:', error);
+      // Nếu là lỗi nghiệp vụ (tự throw), trả về message gốc
+      if (typeof error.message === 'string' && (
+        error.message.includes('tạm khóa') ||
+        error.message.includes('không có quyền truy cập')
+      )) {
+        throw error; // Giữ nguyên message để LoginForm phân loại
+      }
       throw this.getErrorMessage(error.code);
     }
   }
@@ -69,7 +76,7 @@ export class AuthService {
           }
 
           // Kiểm tra trạng thái active
-          if (!ownerData.active) {
+          if (!ownerData.active || ownerData.status === 'inactive') {
             console.warn('Tài khoản owner bị khóa, đăng xuất tự động');
             await signOut(auth);
             callback(null);

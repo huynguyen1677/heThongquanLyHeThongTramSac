@@ -88,7 +88,7 @@ const LoginForm = ({ onLogin }) => {
       <div className="card" style={{ width: '100%', maxWidth: '400px' }}>
         <div className="card-header text-center">
           <h1 className="card-title" style={{ color: '#3b82f6', marginBottom: '0.5rem' }}>
-            🏢 Owner Portal
+          Owner Portal
           </h1>
           <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>
             Quản lý hệ thống trạm sạc của bạn
@@ -117,6 +117,48 @@ const LoginForm = ({ onLogin }) => {
                     <li><strong>Người dùng cuối</strong> → Sử dụng User App</li>
                     <li><strong>Chưa có tài khoản</strong> → Liên hệ admin</li>
                   </ul>
+                </div>
+              )}
+              {errorType === 'account-locked' && (
+                <div style={{
+                  background: '#fee2e2',
+                  color: '#991b1b',
+                  padding: '1rem',
+                  borderRadius: '0.5rem',
+                  fontSize: '0.875rem',
+                  marginTop: '0.75rem',
+                  border: '2px solid #fca5a5',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                }}>
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    marginBottom: '0.75rem',
+                    fontSize: '1rem',
+                    fontWeight: 'bold'
+                  }}>
+                    🚫 Tài khoản đã bị tạm ngưng!
+                  </div>
+                  <div style={{ 
+                    lineHeight: '1.5',
+                    marginBottom: '0.75rem'
+                  }}>
+                    Tài khoản của bạn hiện đang bị <strong>tạm ngưng hoạt động</strong> và không thể truy cập hệ thống.
+                  </div>
+                  <div style={{
+                    background: 'rgba(255, 255, 255, 0.8)',
+                    padding: '0.75rem',
+                    borderRadius: '0.375rem',
+                    fontSize: '0.8rem',
+                    border: '1px dashed #f87171'
+                  }}>
+                    <strong>📞 Hướng dẫn khắc phục:</strong>
+                    <ul style={{ margin: '0.5rem 0 0 0', paddingLeft: '1.2rem' }}>
+                      <li>Liên hệ quản trị viên hệ thống</li>
+                      <li>Cung cấp email tài khoản: <strong>{email}</strong></li>
+                      <li>Yêu cầu kích hoạt lại tài khoản</li>
+                    </ul>
+                  </div>
                 </div>
               )}
             </ToastNotification>
