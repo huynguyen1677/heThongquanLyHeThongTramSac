@@ -2,6 +2,7 @@ import { firebase } from './firebase.js';
 import { logger } from '../utils/logger.js';
 import { getTimestamp } from '../utils/time.js';
 import { DEFAULT_PRICE_PER_KWH } from '../domain/constants.js';
+import { firestoreService } from './firestore.js';
 
 class RealtimeService {
   constructor() {
@@ -17,6 +18,22 @@ class RealtimeService {
       this.db = firebase.getDatabase();
       logger.info(`[RTDB] databaseURL = ${this.db.app?.options?.databaseURL}`);
       logger.info('Realtime Database service ready');
+
+      // Lấy giá điện từ Firestore khi khởi động
+      firestoreService.getPricePerKwh().then((price) => {
+        if (price) {
+          this.pricePerKwh = price;
+          logger.info(`Loaded pricePerKwh from Firestore: ${price}`);
+        }
+      });
+
+      // Lắng nghe thay đổi giá điện realtime từ Firestore
+      firestoreService.listenPricePerKwh((price) => {
+        if (price) {
+          this.pricePerKwh = price;
+          logger.info(`Realtime pricePerKwh updated from Firestore: ${price}`);
+        }
+      });
     } else {
       logger.warn('Realtime Database service not available - Firebase not initialized');
     }
@@ -39,11 +56,21 @@ class RealtimeService {
         stationName: stationInfo.stationName || null,
         vendor: stationInfo.vendor || null,
         model: stationInfo.model || null,
-        firmwareVersion: stationInfo.firmwareVersion || null
+        firmwareVersion: stationInfo.firmwareVersion || null,
+        // Location information
+        address: stationInfo.address || null,
+        latitude: stationInfo.latitude || null,
+        longitude: stationInfo.longitude || null
       };
       
       await stationRef.update(data);
-      logger.info(`Station ${stationId} online status updated: ${isOnline}`);
+      logger.info(`Station ${stationId} online status updated: ${isOnline}${stationInfo.address ? ` at ${stationInfo.address}` : ''}`);
+      
+      // Trigger sync to Firestore khi station online
+      if (isOnline) {
+        this.triggerStationSync(stationId, data);
+      }
+      
       return true;
     } catch (error) {
       logger.error('Error updating station online status:', error);
@@ -66,7 +93,7 @@ class RealtimeService {
     }
   }
 
-  // Cập nhật thông tin station (vendor, model, firmware, v.v.)
+  // Cập nhật thông tin station (vendor, model, firmware, location, v.v.)
   async updateStationInfo(stationId, stationInfo) {
     if (!this.isAvailable()) return false;
 
@@ -79,6 +106,10 @@ class RealtimeService {
       if (stationInfo.vendor !== undefined) updateData.vendor = stationInfo.vendor;
       if (stationInfo.model !== undefined) updateData.model = stationInfo.model;
       if (stationInfo.firmwareVersion !== undefined) updateData.firmwareVersion = stationInfo.firmwareVersion;
+      // Location information
+      if (stationInfo.address !== undefined) updateData.address = stationInfo.address;
+      if (stationInfo.latitude !== undefined) updateData.latitude = stationInfo.latitude;
+      if (stationInfo.longitude !== undefined) updateData.longitude = stationInfo.longitude;
       
       await stationRef.update(updateData);
       logger.debug(`Station ${stationId} info updated:`, updateData);
@@ -90,27 +121,47 @@ class RealtimeService {
   }
 
   // Bắt đầu transaction - lưu giá trị Wh ban đầu
-  async startTransaction(stationId, connectorId, transactionId, initialWhValue = 0) {
+  async startTransaction(stationId, connectorId, transactionId, initialWhValue = 0, idTag) {
     if (!this.isAvailable()) return false;
 
     try {
       const transactionKey = `${stationId}-${connectorId}-${transactionId}`;
-      
+
+      // Lấy dữ liệu hiện tại của connector
+      const connectorSnapshot = await this.db.ref(`live/stations/${stationId}/connectors/${connectorId}`).once('value');
+      const currentData = connectorSnapshot.val();
+
+      // Nếu đã có transaction đang chạy, không reset các giá trị
+      if (currentData && currentData.txId === transactionId) {
+        logger.info(`Transaction already active: ${stationId}/${connectorId} -> ${transactionId}, skip reset`);
+        return true;
+      }
+
       // Lưu vào cache
       this.transactionStartValues.set(transactionKey, initialWhValue);
-      
-      // Cập nhật connector với transaction mới và reset Wh_total về 0
+
+      // Cập nhật connector - GIỮ NGUYÊN Wh_total và kwh tích lũy
       const connectorRef = this.db.ref(`live/stations/${stationId}/connectors/${connectorId}`);
-      await connectorRef.update({
-        txId: transactionId,                              // number|null
-        Wh_total: 0,                                      // tổng Wh lũy kế trong phiên hoặc theo đồng hồ trạm (>=0) - reset về 0 cho phiên mới
-        W_now: 0,                                         // công suất hiện tại (W)
-        kwh: 0,                                           // Wh_total quy đổi kWh (dùng cho UI)
-        costEstimate: 0,                                  // kWh*price, làm tròn, để UI hiện tức thời
-        lastUpdate: getTimestamp()                        // epoch millis (server time)
-      });
-      
-      logger.info(`Transaction started: ${stationId}/${connectorId} -> ${transactionId}, startWh: ${initialWhValue}`);
+      const updateData = {
+        userId: idTag || null, // <-- Lưu userId (idTag)
+        txId: transactionId,
+        W_now: 0,
+        session_kwh: 0,        // kWh của phiên hiện tại (để tracking riêng)
+        session_cost: 0,       // Chi phí của phiên hiện tại
+        lastUpdate: getTimestamp()
+      };
+
+      // Nếu chưa có Wh_total và kwh, khởi tạo
+      if (!currentData || currentData.Wh_total === undefined) {
+        updateData.Wh_total = 0;
+        updateData.kwh = 0;
+        updateData.costEstimate = 0;
+      }
+      // Nếu đã có thì GIỮ NGUYÊN (không update)
+
+      await connectorRef.update(updateData);
+
+      logger.info(`Transaction started: ${stationId}/${connectorId} -> ${transactionId}, startWh: ${initialWhValue}, userId: ${idTag || 'N/A'}`);
       return true;
     } catch (error) {
       logger.error('Error starting transaction:', error);
@@ -118,12 +169,60 @@ class RealtimeService {
     }
   }
 
-  // Kết thúc transaction - cleanup
-  async stopTransaction(stationId, connectorId, transactionId) {
+  // Kết thúc transaction - cleanup và xử lý thanh toán
+  async stopTransaction(stationId, connectorId, transactionId, shouldProcessPayment = true) {
     if (!this.isAvailable()) return false;
 
     try {
       const transactionKey = `${stationId}-${connectorId}-${transactionId}`;
+      
+      // Lấy dữ liệu connector cuối cùng trước khi cleanup
+      const connectorSnapshot = await this.db.ref(`live/stations/${stationId}/connectors/${connectorId}`).once('value');
+      const connectorData = connectorSnapshot.val();
+      
+      // Delay payment processing để đảm bảo charging session đã được lưu vào Firestore
+      if (shouldProcessPayment && connectorData && connectorData.userId) {
+        logger.info(`🏦 Processing payment for transaction: ${transactionId}, userId: ${connectorData.userId}`);
+        
+        // Sử dụng setTimeout để chạy payment sau khi tất cả cập nhật khác hoàn thành
+        setTimeout(async () => {
+          try {
+            const { handleStopTransaction } = await import('../payments/paymentService.js');
+            const paymentResult = await handleStopTransaction(transactionId);
+            
+            if (paymentResult && paymentResult.success) {
+              logger.info(`✅ Payment completed for transaction ${transactionId}`);
+              
+              // Gửi notification thành công
+              await this.sendNotification('payment_success',
+                `Payment processed successfully. Amount: ${paymentResult.costCalculation?.totalCost || 'N/A'} VND`,
+                null,
+                connectorData.userId
+              );
+            } else {
+              logger.error(`❌ Payment failed for transaction ${transactionId}:`, paymentResult?.error || 'Unknown error');
+              
+              // Gửi notification thất bại
+              await this.sendNotification('payment_failed',
+                `Payment failed: ${paymentResult?.error || 'Unknown error'}`,
+                null,
+                connectorData.userId
+              );
+            }
+          } catch (paymentError) {
+            logger.error(`💥 Payment processing error for transaction ${transactionId}:`, paymentError);
+            
+            // Gửi notification lỗi hệ thống
+            await this.sendNotification('payment_error',
+              'Payment system error. Please contact support.',
+              null,
+              connectorData.userId
+            );
+          }
+        }, 500); // Delay 500ms để đảm bảo session đã được lưu
+      } else {
+        logger.info(`⏭️ Skipping payment processing for transaction ${transactionId} (shouldProcessPayment: ${shouldProcessPayment}, userId: ${connectorData?.userId})`);
+      }
       
       // Xóa từ cache
       this.transactionStartValues.delete(transactionKey);
@@ -131,9 +230,12 @@ class RealtimeService {
       // Cập nhật connector - giữ lại Wh_total cuối cùng nhưng clear txId
       const connectorRef = this.db.ref(`live/stations/${stationId}/connectors/${connectorId}`);
       await connectorRef.update({
-        txId: null,                                       // number|null - clear transaction ID
-        W_now: 0,                                         // công suất hiện tại (W) - reset về 0
-        lastUpdate: getTimestamp()                        // epoch millis (server time)
+        txId: null, // number|null - clear transaction ID
+        userId: null, // clear user ID
+        W_now: 0, // công suất hiện tại (W) - reset về 0
+        session_kwh: 0, // Reset session kWh
+        session_cost: 0, // Reset session cost
+        lastUpdate: getTimestamp() // epoch millis (server time)
         // Giữ lại Wh_total, kwh, costEstimate để hiển thị kết quả cuối
       });
       
@@ -163,12 +265,13 @@ class RealtimeService {
       }
 
       // Xử lý dữ liệu năng lượng chính xác
-      if (statusData.currentWhReading !== undefined && statusData.txId) {
-        const calculatedWhTotal = await this.calculateWhTotal(stationId, connectorId, statusData.txId, statusData.currentWhReading);
-        
-        data.Wh_total = calculatedWhTotal;                // tổng Wh lũy kế trong phiên hoặc theo đồng hồ trạm (>=0)
-        data.kwh = Math.round((calculatedWhTotal / 1000) * 100) / 100;  // Wh_total quy đổi kWh (dùng cho UI)
-        data.costEstimate = Math.round(data.kwh * this.pricePerKwh);     // kWh*price, làm tròn, để UI hiện tức thời
+      // This should only pass through values, not calculate them.
+      // Calculation is handled by updateConnectorMeterValues.
+      // StopTransaction sends a final Wh_total here.
+      if (statusData.Wh_total !== undefined) {
+        data.Wh_total = statusData.Wh_total;
+        data.kwh = Math.round((statusData.Wh_total / 1000) * 100) / 100;  // kWh với 2 chữ số thập phân
+        data.costEstimate = Math.round(data.kwh * this.pricePerKwh);     // Cost làm tròn đồng
       }
 
       // Cập nhật công suất hiện tại
@@ -204,19 +307,25 @@ class RealtimeService {
       const currentTxId = currentConnectorData.txId;
       const currentWhReading = meterData.currentWhReading || meterData.Wh_reading || 0;
       
-      // Tính Wh_total chính xác cho phiên hiện tại
-      const calculatedWhTotal = await this.calculateWhTotal(stationId, connectorId, currentTxId, currentWhReading);
+      // Tính Wh cho session hiện tại
+      const sessionWh = await this.calculateSessionWh(stationId, connectorId, currentTxId, currentWhReading);
+      
+      // Wh_total là giá trị đồng hồ tích lũy. Nó chỉ nên tăng.
+      const previousWhTotal = currentConnectorData.Wh_total || 0;
+      const newWhTotal = Math.max(previousWhTotal, currentWhReading);
       
       const connectorRef = this.db.ref(`live/stations/${stationId}/connectors/${connectorId}`);
       const data = {
-        Wh_total: calculatedWhTotal,                      // tổng Wh lũy kế trong phiên hoặc theo đồng hồ trạm (>=0)
+        Wh_total: newWhTotal,                             // Giá trị đồng hồ tích lũy (chỉ tăng)
+        session_kwh: Math.round((sessionWh / 1000) * 100) / 100,  // kWh session với 2 chữ số thập phân
         W_now: meterData.W_now || meterData.power || 0,   // công suất hiện tại (W)
         lastUpdate: getTimestamp()                        // epoch millis (server time)
       };
 
       // Tính toán giá trị hiển thị cho app
-      data.kwh = Math.round((calculatedWhTotal / 1000) * 100) / 100;        // Wh_total quy đổi kWh (dùng cho UI)
-      data.costEstimate = Math.round(data.kwh * this.pricePerKwh);           // kWh*price, làm tròn, để UI hiện tức thời
+      data.kwh = Math.round((newWhTotal / 1000) * 100) / 100;           // Tổng kWh với 2 chữ số thập phân
+      data.costEstimate = Math.round(data.kwh * this.pricePerKwh);       // Tổng cost làm tròn đồng
+      data.session_cost = Math.round(data.session_kwh * this.pricePerKwh); // Chi phí session làm tròn đồng
 
       await connectorRef.update(data);
       return true;
@@ -227,7 +336,7 @@ class RealtimeService {
   }
 
   // Hàm tính toán Wh_total chính xác cho phiên
-  async calculateWhTotal(stationId, connectorId, transactionId, currentWhReading) {
+  async calculateSessionWh(stationId, connectorId, transactionId, currentWhReading) {
     const transactionKey = `${stationId}-${connectorId}-${transactionId}`;
     
     // Lấy giá trị bắt đầu từ cache
@@ -253,9 +362,9 @@ class RealtimeService {
     }
     
     // Tính Wh_total = hiện tại - bắt đầu
-    const whTotal = Math.max(0, currentWhReading - startWhValue);
+    const sessionWh = Math.max(0, currentWhReading - startWhValue);
     
-    return whTotal;
+    return sessionWh;
   }
 
   // Cập nhật transaction ID cho connector - cải thiện
@@ -640,6 +749,231 @@ class RealtimeService {
     } catch (error) {
       logger.error('Error cleaning up expired data:', error);
       return false;
+    }
+  }
+
+  // Trigger sync to Firestore (không chặn luồng chính)
+  triggerStationSync(stationId, stationData) {
+    // Import động để tránh circular dependency
+    import('./syncService.js').then(({ syncService }) => {
+      if (syncService && syncService.isRunning) {
+        syncService.syncSingleStation(stationId, stationData).catch(error => {
+          logger.error(`Error syncing station ${stationId} to Firestore:`, error);
+        });
+      }
+    }).catch(error => {
+      logger.debug('SyncService not available:', error.message);
+    });
+  }
+
+  // User confirmation functions for charging requests
+  async saveChargingConfirmation(userId, confirmationData) {
+    if (!this.isAvailable()) {
+      logger.error('❌ Realtime Database not available');
+      return false;
+    }
+    try {
+      logger.info(`📝 Attempting to save charging confirmation for user: ${userId}`);
+      logger.info(`📝 Data:`, confirmationData);
+      logger.info(`📝 Path: chargingRequests/${userId}`);
+      
+      await this.db.ref(`chargingRequests/${userId}`).set(confirmationData);
+      
+      logger.info(`✅ Successfully saved charging confirmation for user: ${userId}`);
+      return true;
+    } catch (error) {
+      logger.error('❌ Error saving charging confirmation:', error);
+      logger.error('❌ Error details:', error.message);
+      logger.error('❌ Error stack:', error.stack);
+      throw error;
+    }
+  }
+
+  listenForChargingResponse(userId, callback) {
+    if (!this.isAvailable()) {
+      logger.error('Firebase Realtime Database not available');
+      return null;
+    }
+
+    const path = `chargingRequests/${userId}/status`;
+    const ref = this.db.ref(path);
+    
+    const listener = ref.on('value', (snapshot) => {
+      const status = snapshot.val();
+      if (status && status !== 'pending') {
+        callback(status);
+      }
+    });
+    
+    logger.info(`👂 Listening for charging response from user ${userId}`);
+    
+    // Return unsubscribe function
+    return () => {
+      ref.off('value', listener);
+      logger.info(`🚫 Stopped listening for user ${userId} response`);
+    };
+  }
+
+  // Cập nhật ngưỡng sạc đầy cho connector
+  async updateConnectorThreshold(stationId, connectorId, fullChargeThresholdKwh, currentEnergyKwh, duration, estimatedCost, powerKw) {
+    if (!this.isAvailable()) return false;
+
+    try {
+      const connectorRef = this.db.ref(`live/stations/${stationId}/connectors/${connectorId}`);
+      const updateData = {
+        fullChargeThresholdKwh: fullChargeThresholdKwh,
+        currentEnergyKwh: Math.round(currentEnergyKwh * 100) / 100,
+        chargeProgress: Math.min(100, Math.round((currentEnergyKwh / fullChargeThresholdKwh) * 100)),
+        // Thêm thông tin đầy đủ từ client
+        duration: duration || '00:00:00',
+        estimatedCost: estimatedCost || 0,
+        powerKw: powerKw || 0,
+        lastUpdate: getTimestamp()
+      };
+
+      await connectorRef.update(updateData);
+      logger.debug(`✅ Updated connector data: ${stationId}/${connectorId} - ${fullChargeThresholdKwh}kWh, ${duration}, $${estimatedCost}`);
+      return true;
+    } catch (error) {
+      logger.error('Error updating connector threshold:', error);
+      return false;
+    }
+  }
+
+  // XỬ LÝ THANH TOÁN KHI KẾT THÚC PHIÊN SẠC
+  async processSessionPayment(paymentData) {
+    try {
+      logger.info('🏦 Starting session payment processing...', { 
+        userId: paymentData.userId,
+        transactionId: paymentData.transactionId,
+        sessionCost: paymentData.sessionCost 
+      });
+
+      // Import PaymentProcessor để tránh circular dependency
+      const { PaymentProcessor } = await import('../payments/paymentProcessor.js');
+      
+      const result = await PaymentProcessor.processSessionPayment(paymentData);
+      
+      if (result.success) {
+        logger.info('✅ Session payment completed successfully', {
+          userId: paymentData.userId,
+          transactionId: paymentData.transactionId,
+          amount: result.costCalculation.totalCost,
+          newBalance: result.payment.newBalance
+        });
+
+        // Gửi notification cho user về thanh toán thành công
+        await this.sendNotification('payment_success', 
+          `Payment processed successfully. Amount: ${result.costCalculation.totalCost} VND. New balance: ${result.payment.newBalance} VND`,
+          null,
+          paymentData.userId
+        );
+
+        // Cập nhật trạng thái thanh toán vào realtime DB
+        await this.updatePaymentStatus(paymentData.transactionId, 'paid', result);
+
+      } else {
+        logger.error('❌ Session payment failed', {
+          userId: paymentData.userId,
+          transactionId: paymentData.transactionId,
+          error: result.error
+        });
+
+        // Gửi notification cho user về lỗi thanh toán
+        await this.sendNotification('payment_failed',
+          `Payment failed: ${result.error}`,
+          null,
+          paymentData.userId
+        );
+
+        // Cập nhật trạng thái thanh toán vào realtime DB
+        await this.updatePaymentStatus(paymentData.transactionId, 'failed', result);
+      }
+
+      return result;
+
+    } catch (error) {
+      logger.error('💥 Error in session payment processing:', error);
+      
+      // Gửi notification cho user về lỗi hệ thống
+      await this.sendNotification('payment_error',
+        `Payment system error. Please contact support.`,
+        null,
+        paymentData.userId
+      );
+
+      return {
+        success: false,
+        error: error.message,
+        errorCode: 'PAYMENT_SYSTEM_ERROR'
+      };
+    }
+  }
+
+  // Cập nhật trạng thái thanh toán vào realtime DB
+  async updatePaymentStatus(transactionId, status, paymentResult) {
+    if (!this.isAvailable()) return false;
+
+    try {
+      const paymentRef = this.db.ref(`payments/${transactionId}`);
+      const data = {
+        status, // 'paid', 'failed', 'pending'
+        timestamp: getTimestamp(),
+        ...paymentResult
+      };
+
+      await paymentRef.set(data);
+      logger.debug(`Payment status updated: ${transactionId} -> ${status}`);
+      return true;
+
+    } catch (error) {
+      logger.error('Error updating payment status:', error);
+      return false;
+    }
+  }
+
+  // Kiểm tra số dư user trước khi bắt đầu sạc
+  async checkUserBalanceForCharging(userId, estimatedCost = 0) {
+    try {
+      // Import BalanceUpdater để kiểm tra số dư
+      const { BalanceUpdater } = await import('../payments/balanceUpdater.js');
+      
+      const balanceCheck = await BalanceUpdater.checkSufficientBalance(userId, estimatedCost);
+      
+      if (balanceCheck.sufficient) {
+        logger.info(`✅ User ${userId} has sufficient balance: ${balanceCheck.currentBalance} >= ${estimatedCost}`);
+      } else {
+        logger.warn(`⚠️ User ${userId} has insufficient balance: ${balanceCheck.currentBalance} < ${estimatedCost}`);
+      }
+
+      return balanceCheck;
+
+    } catch (error) {
+      logger.error('Error checking user balance:', error);
+      return {
+        userId,
+        currentBalance: 0,
+        requiredAmount: estimatedCost,
+        sufficient: false,
+        error: error.message
+      };
+    }
+  }
+
+  // Lấy lịch sử thanh toán realtime
+  async getPaymentHistory(userId, limit = 20) {
+    try {
+      // Import BalanceUpdater để lấy lịch sử
+      const { BalanceUpdater } = await import('../payments/balanceUpdater.js');
+      
+      const history = await BalanceUpdater.getPaymentHistory(userId, limit);
+      logger.debug(`Retrieved ${history.length} payment records for user ${userId}`);
+      
+      return history;
+
+    } catch (error) {
+      logger.error('Error getting payment history:', error);
+      return [];
     }
   }
 }

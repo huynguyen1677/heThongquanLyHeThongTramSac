@@ -16,6 +16,7 @@ export class OcppClient {
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 5;
     this.reconnectDelay = 1000; // Start with 1 second
+    this.remoteIdTag = null; // Lưu idTag từ RemoteStartTransaction
   }
 
   // Set event handlers
@@ -190,6 +191,12 @@ export class OcppClient {
     if (!validation.success) {
       this.sendCallError(messageId, 'TypeConstraintViolation', validation.error);
       return;
+    }
+
+    // Nếu là RemoteStartTransaction thì lưu lại idTag
+    if (action === 'RemoteStartTransaction' && payload && payload.idTag) {
+      this.remoteIdTag = payload.idTag;
+      this.log(`💡 Lưu idTag từ RemoteStartTransaction: ${payload.idTag}`, 'info');
     }
 
     // Pass to message handler
@@ -384,5 +391,20 @@ export class OcppClient {
   // Get pending calls count (for debugging)
   getPendingCallsCount() {
     return this.pendingCalls.size;
+  }
+
+  // Hàm gửi StartTransaction (bạn cần truyền đúng idTag)
+  async sendStartTransaction(connectorId, meterStart, inputIdTag = null) {
+    // Ưu tiên inputIdTag (từ UI), nếu không có thì lấy remoteIdTag (từ app)
+    const idTag = inputIdTag || this.remoteIdTag;
+    if (!idTag) throw new Error('Không tìm thấy idTag! Vui lòng nhập mã xác nhận hoặc nhận lệnh từ app.');
+
+    const payload = {
+      connectorId,
+      idTag,
+      meterStart,
+      timestamp: new Date().toISOString()
+    };
+    return this.sendCall('StartTransaction', payload);
   }
 }

@@ -61,65 +61,45 @@ const LogConsole = ({ logs, maxLogs = 100 }) => {
   const formatLogContent = (log) => {
     if (log.type === 'call') {
       return (
-        <div className="log-content">
-          <div className="log-header">
-            <span className="log-action">CALL {log.action}</span>
-            <span className="log-id">ID: {log.messageId}</span>
-          </div>
-          {log.payload && (
-            <div className="log-payload">
-              <pre>{JSON.stringify(log.payload, null, 2)}</pre>
-            </div>
-          )}
+        <div className="log-call">
+          <span className="log-action">{log.action}</span>
+          <span className="log-message-id">ID: {log.messageId}</span>
+          {/* Sửa lỗi ở đây - convert object thành string */}
+          <pre className="log-payload">{JSON.stringify(log.payload, null, 2)}</pre>
         </div>
       );
     }
 
     if (log.type === 'callresult') {
       return (
-        <div className="log-content">
-          <div className="log-header">
-            <span className="log-action">CALLRESULT {log.action}</span>
-            <span className="log-id">ID: {log.messageId}</span>
-          </div>
-          {log.payload && (
-            <div className="log-payload">
-              <pre>{JSON.stringify(log.payload, null, 2)}</pre>
-            </div>
-          )}
+        <div className="log-callresult">
+          <span className="log-message-id">ID: {log.messageId}</span>
+          {/* Sửa lỗi ở đây - convert object thành string */}
+          <pre className="log-payload">{JSON.stringify(log.payload, null, 2)}</pre>
         </div>
       );
     }
 
     if (log.type === 'callerror') {
       return (
-        <div className="log-content">
-          <div className="log-header">
-            <span className="log-action">CALLERROR {log.action}</span>
-            <span className="log-id">ID: {log.messageId}</span>
-          </div>
-          <div className="log-error">
-            <div><strong>Error:</strong> {log.errorCode}</div>
-            <div><strong>Description:</strong> {log.errorDescription}</div>
-          </div>
+        <div className="log-callerror">
+          <span className="log-error-code">{log.errorCode}</span>
+          <span className="log-error-description">{log.errorDescription}</span>
+          <span className="log-message-id">ID: {log.messageId}</span>
         </div>
       );
     }
 
-    if (log.type === 'log') {
-      return (
-        <div className="log-content">
-          <div className="log-message">{log.message}</div>
-          {log.data && (
-            <div className="log-data">
-              <pre>{JSON.stringify(log.data, null, 2)}</pre>
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    return <div className="log-content">{log.message || 'Unknown log type'}</div>;
+    // Default log message
+    return (
+      <div className="log-message">
+        {/* Đảm bảo log.message là string, không phải object */}
+        {typeof log.message === 'object' ? JSON.stringify(log.message) : log.message}
+        {log.data && (
+          <pre className="log-data">{JSON.stringify(log.data, null, 2)}</pre>
+        )}
+      </div>
+    );
   };
 
   const clearLogs = () => {

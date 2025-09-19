@@ -45,6 +45,11 @@
   color: #004085;
 }
 
+.status-badge.purple {
+  background: #e1d4f0;
+  color: #5a2d91;
+}
+
 .status-badge.orange {
   background: #ffeaa7;
   color: #b8860b;
@@ -218,6 +223,15 @@
   background: #5a6268;
 }
 
+.btn-info {
+  background: #17a2b8;
+  color: white;
+}
+
+.btn-info:hover:not(:disabled) {
+  background: #138496;
+}
+
 .btn-gray {
   background: #e9ecef;
   color: #495057;
@@ -228,8 +242,12 @@
 }
 
 .charging-info {
-  background: #e3f2fd;
-  border-left: 4px solid #2196f3;
+  background: #f0f9ff;
+  border: 1px solid #90cdf4;
+  border-radius: 10px;
+  padding: 18px 16px;
+  margin: 16px 0;
+  box-shadow: 0 2px 8px rgba(56,178,172,0.08);
 }
 
 .info-grid {
@@ -261,6 +279,68 @@
 .info-item span.cost {
   font-weight: 700;
   color: #28a745;
+}
+
+.full-charged-notice {
+  background: #e6fffa;
+  color: #065f46;
+  border: 1px solid #38b2ac;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 12px 0;
+  text-align: center;
+  font-size: 1.1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+}
+
+.charging-progress-bar {
+  width: 100%;
+  height: 18px;
+  background: #e2e8f0;
+  border-radius: 9px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.charging-progress {
+  height: 100%;
+  transition: width 0.5s;
+  border-radius: 9px;
+}
+
+.charging-progress-label {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #2563eb;
+  margin-bottom: 6px;
+}
+
+.charging-time-label {
+  font-size: 1rem;
+  color: #065f46;
+  margin-bottom: 10px;
+}
+
+.charging-details-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.charging-detail-label {
+  font-size: 0.95rem;
+  color: #555;
+}
+
+.charging-detail-value {
+  font-weight: 600;
+  color: #222;
+  margin-left: 4px;
 }
 
 @media (max-width: 768px) {

@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../../../tool_py"
+		},
+		{
+			"path": "../../js"
+		}
+	],
+	"settings": {
+		"liveServer.settings.multiRootWorkspaceName": "js",
+		"javascript.suggest.enabled": false
+	}
+}

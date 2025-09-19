@@ -1,11 +1,51 @@
 import express from 'express';
 import { sessions } from '../ocpp/sessions.js';
 import { ocppServer } from '../ocpp/wsServer.js';
+import { syncService } from '../services/syncService.js';
 // import { firestoreService } from '../services/firestore.js';
 // import { realtimeService } from '../services/realtime.js';
 import { logger } from '../utils/logger.js';
 
 const router = express.Router();
+
+// Sync stations by owner
+router.post('/sync', async (req, res) => {
+  try {
+    const { ownerId } = req.body;
+    
+    if (!ownerId) {
+      return res.status(400).json({
+        success: false,
+        error: 'ownerId is required'
+      });
+    }
+
+    if (!syncService || !syncService.isRunning) {
+      return res.status(503).json({
+        success: false,
+        error: 'Sync service not available'
+      });
+    }
+
+    logger.info(`API: Syncing stations for owner: ${ownerId}`);
+    const result = await syncService.syncStationsByOwner(ownerId);
+    
+    res.json({
+      success: true,
+      data: {
+        message: 'Sync completed successfully',
+        synced: result.synced,
+        skipped: result.skipped
+      }
+    });
+  } catch (error) {
+    logger.error('Error syncing stations by owner:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
+});
 
 // Get all stations
 router.get('/', async (req, res) => {

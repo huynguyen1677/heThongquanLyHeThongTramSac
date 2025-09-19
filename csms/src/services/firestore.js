@@ -35,8 +35,9 @@ class FirestoreService {
       logger.debug(`Station saved to Firestore: ${stationData.id}`);
       return data;
     } catch (error) {
-      logger.error('Error saving station to Firestore:', error);
-      return null;
+      // Log the full error object for better debugging
+      logger.error({ err: error }, `Error saving station ${stationData.id} to Firestore`);
+      throw error; // Re-throw the error so the caller can handle it
     }
   }
 
@@ -123,8 +124,8 @@ class FirestoreService {
         ...updateData,
         lastUpdated: getTimestamp()
       };
-      
-      await transactionRef.update(data);
+      // Sửa ở đây: dùng set với merge true
+      await transactionRef.set(data, { merge: true });
       logger.debug(`Transaction updated in Firestore: ${transactionId}`);
       return true;
     } catch (error) {
@@ -360,6 +361,178 @@ class FirestoreService {
       return true;
     } catch (error) {
       logger.error('Error saving configuration to Firestore:', error);
+      return false;
+    }
+  }
+
+  // Giá điện (price per kWh) - lưu vào collection 'configuration', document 'pricePerKwh'
+  async getPricePerKwh() {
+    if (!this.isAvailable()) return null;
+
+    try {
+      const configRef = this.db.collection('setting').doc('pricePerKwh');
+      const doc = await configRef.get();
+      if (doc.exists) {
+        return doc.data().value;
+      }
+      return null;
+    } catch (error) {
+      logger.error('Error getting pricePerKwh from Firestore:', error);
+      return null;
+    }
+  }
+
+  async setPricePerKwh(newPrice) {
+    if (!this.isAvailable()) return false;
+
+    try {
+      const configRef = this.db.collection('setting').doc('pricePerKwh');
+      await configRef.set({
+        value: newPrice,
+        lastUpdated: getTimestamp()
+      });
+      logger.info(`Price per kWh updated in Firestore: ${newPrice}`);
+      return true;
+    } catch (error) {
+      logger.error('Error setting pricePerKwh in Firestore:', error);
+      return false;
+    }
+  }
+
+  listenPricePerKwh(callback) {
+    if (!this.isAvailable()) return;
+    this.db.collection('setting').doc('pricePerKwh')
+      .onSnapshot((doc) => {
+        if (doc.exists && typeof callback === 'function') {
+          callback(doc.data().value);
+        }
+      });
+  }
+
+  // Transaction Sessions Management
+  async saveChargingSession(sessionData) {
+    if (!this.isAvailable()) return null;
+
+    try {
+      const sessionRef = this.db.collection('chargingSessions').doc(sessionData.id.toString());
+      const data = {
+        ...sessionData,
+        lastUpdated: getTimestamp()
+      };
+      
+      await sessionRef.set(data, { merge: true });
+      logger.info(`Charging session saved to Firestore: ${sessionData.id}`);
+      return data;
+    } catch (error) {
+      logger.error(`Error saving charging session ${sessionData.id} to Firestore:`, error);
+      throw error;
+    }
+  }
+
+  async updateChargingSession(sessionId, updateData) {
+    if (!this.isAvailable()) return null;
+
+    try {
+      const sessionRef = this.db.collection('chargingSessions').doc(sessionId.toString());
+      const data = {
+        ...updateData,
+        lastUpdated: getTimestamp()
+      };
+      // Dùng set với merge: true thay vì update để tránh lỗi document không tồn tại
+      await sessionRef.set(data, { merge: true });
+      logger.debug(`Charging session updated in Firestore: ${sessionId}`);
+      return data;
+    } catch (error) {
+      logger.error(`Error updating charging session ${sessionId} in Firestore:`, error.message);
+      logger.error(`Full error:`, error);
+      throw error;
+    }
+  }
+
+  async getChargingSession(sessionId) {
+    if (!this.isAvailable()) return null;
+
+    try {
+      const sessionRef = this.db.collection('chargingSessions').doc(sessionId.toString());
+      const doc = await sessionRef.get();
+      
+      if (doc.exists) {
+        return { id: doc.id, ...doc.data() };
+      }
+      return null;
+    } catch (error) {
+      logger.error(`Error getting charging session ${sessionId} from Firestore:`, error);
+      return null;
+    }
+  }
+
+  async getChargingSessionsByUser(userId, limit = 50) {
+    if (!this.isAvailable()) return [];
+
+    try {
+      const sessionsRef = this.db.collection('chargingSessions')
+        .where('userId', '==', userId)
+        .orderBy('startTime', 'desc')
+        .limit(limit);
+      
+      const snapshot = await sessionsRef.get();
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      logger.error(`Error getting charging sessions for user ${userId}:`, error);
+      return [];
+    }
+  }
+
+  async getChargingSessionsByStation(stationId, limit = 50) {
+    if (!this.isAvailable()) return [];
+
+    try {
+      const sessionsRef = this.db.collection('chargingSessions')
+        .where('stationId', '==', stationId)
+        .orderBy('startTime', 'desc')
+        .limit(limit);
+      
+      const snapshot = await sessionsRef.get();
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      logger.error(`Error getting charging sessions for station ${stationId}:`, error);
+      return [];
+    }
+  }
+
+  async getChargingSessionsByOwner(ownerId, limit = 100) {
+    if (!this.isAvailable()) return [];
+
+    try {
+      const sessionsRef = this.db.collection('chargingSessions')
+        .where('ownerId', '==', ownerId)
+        .orderBy('startTime', 'desc')
+        .limit(limit);
+      
+      const snapshot = await sessionsRef.get();
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      logger.error(`Error getting charging sessions for owner ${ownerId}:`, error);
+      return [];
+    }
+  }
+
+  async addMeterValueToSession(sessionId, meterValue) {
+    if (!this.isAvailable()) return null;
+
+    try {
+      const sessionRef = this.db.collection('chargingSessions').doc(sessionId.toString());
+      
+      // Use arrayUnion to add meter value to the array
+      await sessionRef.update({
+        meterValues: this.db.FieldValue.arrayUnion(meterValue),
+        lastUpdated: getTimestamp()
+      });
+      
+      logger.debug(`Meter value added to session ${sessionId}`);
+      return true;
+    } catch (error) {
+      logger.error(`Error adding meter value to session ${sessionId}:`, error);
       return false;
     }
   }

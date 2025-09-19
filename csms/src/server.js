@@ -7,6 +7,7 @@ import { logger } from './utils/logger.js';
 import { firebase } from './services/firebase.js';
 import { firestoreService } from './services/firestore.js';
 import { realtimeService } from './services/realtime.js';
+import { syncService } from './services/syncService.js';
 import { ocppServer } from './ocpp/wsServer.js';
 
 // Import API routes 
@@ -14,6 +15,8 @@ import stationsRouter from './api/stations.js';
 import transactionsRouter from './api/transactions.js';
 import systemRouter from './api/system.js';
 import connectorsRouter from './api/connectors.js';
+import settingsRouter from './api/settings.js';
+import chargingSessionsRouter from './api/chargingSessions.js';
 
 class CSMSServer {
   constructor() {
@@ -33,6 +36,13 @@ class CSMSServer {
         if (firebase.isInitialized()) {
           firestoreService.initialize();
           realtimeService.initialize();
+          
+          // Khởi động sync service sau khi Firebase đã sẵn sàng
+          setTimeout(() => {
+            syncService.start();
+            logger.info('🔄 Auto sync service started');
+          }, 2000); // Đợi 2 giây để Firebase ổn định
+          
           logger.info('🔥 Firebase services initialized successfully');
         } else {
           logger.warn('⚠️  Firebase services not available - running in standalone mode');
@@ -116,6 +126,47 @@ class CSMSServer {
     this.app.use('/api/transactions', transactionsRouter);
     this.app.use('/api/system', systemRouter);
     this.app.use('/api/connectors', connectorsRouter);
+    this.app.use('/api/settings', settingsRouter);
+    this.app.use('/api/charging-sessions', chargingSessionsRouter);
+
+    // Sync endpoint
+    this.app.post('/api/sync/stations', async (req, res) => {
+      try {
+        const { ownerId } = req.body;
+        
+        if (ownerId) {
+          // Sync stations cho owner cụ thể
+          const result = await syncService.syncStationsByOwner(ownerId);
+          res.json({
+            success: true,
+            message: `Sync completed for owner: ${ownerId}`,
+            result
+          });
+        } else {
+          // Sync tất cả stations
+          await syncService.syncStationsToFirestore();
+          res.json({
+            success: true,
+            message: 'Full sync completed'
+          });
+        }
+      } catch (error) {
+        logger.error('Sync API error:', error);
+        res.status(500).json({
+          success: false,
+          error: error.message
+        });
+      }
+    });
+
+    // Sync status endpoint
+    this.app.get('/api/sync/status', (req, res) => {
+      const status = syncService.getStatus();
+      res.json({
+        success: true,
+        status
+      });
+    });
 
     // Root endpoint with API info
     this.app.get('/', (req, res) => {
@@ -292,6 +343,11 @@ class CSMSServer {
       // Stop OCPP server
       if (ocppServer) {
         ocppServer.stop();
+      }
+
+      // Stop sync service
+      if (syncService) {
+        syncService.stop();
       }
 
       // Stop real-time listeners - commented out for debugging

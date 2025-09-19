@@ -1,0 +1,557 @@
+.charging-confirmation-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  z-index: 99999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+  animation: overlayFadeIn 0.3s ease;
+}
+
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.charging-complete-modal {
+  background: #ffffff;
+  border-radius: 24px;
+  max-width: 480px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+  animation: modalSlideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+}
+
+@keyframes modalSlideUp {
+  from { 
+    opacity: 0; 
+    transform: translateY(30px) scale(0.95);
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Header */
+.modal-header {
+  text-align: center;
+  padding: 40px 24px 24px;
+  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+  border-radius: 24px 24px 0 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.modal-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -50%;
+  width: 200%;
+  height: 100%;
+  background: linear-gradient(45deg, 
+    transparent 30%, 
+    rgba(34, 197, 94, 0.1) 50%, 
+    transparent 70%);
+  animation: shimmer 3s infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.success-icon-container {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 20px;
+}
+
+.success-icon {
+  width: 80px;
+  height: 80px;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  animation: successPop 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) 0.3s both;
+}
+
+@keyframes successPop {
+  0% { transform: scale(0); }
+  100% { transform: scale(1); }
+}
+
+.check-mark {
+  position: relative;
+  width: 32px;
+  height: 32px;
+}
+
+.check-line {
+  position: absolute;
+  background: white;
+  border-radius: 3px;
+  transform-origin: left center;
+}
+
+.check-line-1 {
+  width: 16px;
+  height: 4px;
+  top: 16px;
+  left: 6px;
+  transform: rotate(45deg);
+  animation: checkLine1 0.3s ease 0.6s both;
+}
+
+.check-line-2 {
+  width: 26px;
+  height: 4px;
+  top: 20px;
+  left: 10px;
+  transform: rotate(-45deg);
+  animation: checkLine2 0.3s ease 0.75s both;
+}
+
+@keyframes checkLine1 {
+  0% { transform: rotate(45deg) scaleX(0); }
+  100% { transform: rotate(45deg) scaleX(1); }
+}
+
+@keyframes checkLine2 {
+  0% { transform: rotate(-45deg) scaleX(0); }
+  100% { transform: rotate(-45deg) scaleX(1); }
+}
+
+.success-ripple {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 80px;
+  height: 80px;
+  border: 3px solid rgba(34, 197, 94, 0.3);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  animation: ripple 2s infinite 0.5s;
+}
+
+@keyframes ripple {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.5);
+    opacity: 0;
+  }
+}
+
+.modal-header h2 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #065f46;
+  margin: 0 0 8px;
+  animation: textSlideUp 0.5s ease 0.4s both;
+}
+
+.modal-subtitle {
+  color: #059669;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  animation: textSlideUp 0.5s ease 0.5s both;
+}
+
+@keyframes textSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Session Info */
+.session-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 20px 24px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.station-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.connector-info {
+  background: #e2e8f0;
+  color: #475569;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Stats Grid */
+.modal-content {
+  padding: 24px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr); /* Đảm bảo 3 cột bằng nhau */
+  gap: 16px;
+  margin-bottom: 24px;
+  width: 100%; /* Thêm width 100% */
+}
+
+.stat-card {
+  background: #f8fafc;
+  border-radius: 16px;
+  padding: 20px 16px;
+  text-align: center;
+  border: 2px solid transparent;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  min-height: 120px; /* Thêm min-height để đảm bảo chiều cao */
+  width: 100%; /* Đảm bảo width đầy đủ */
+  box-sizing: border-box; /* Bao gồm padding trong width */
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  border-radius: 16px 16px 0 0;
+}
+
+.stat-card.energy::before {
+  background: linear-gradient(90deg, #fbbf24, #f59e0b);
+}
+
+.stat-card.time::before {
+  background: linear-gradient(90deg, #3b82f6, #1d4ed8);
+}
+
+.stat-card.progress1::before {
+  background: linear-gradient(90deg, #22c55e, #16a34a);
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.stat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 12px;
+  font-size: 20px;
+  color: white;
+}
+
+.stat-card.energy .stat-icon {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+}
+
+.stat-card.time .stat-icon {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+}
+
+.stat-card.progress1 .stat-icon {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+}
+
+.stat-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1;
+}
+
+.stat-unit {
+  font-size: 14px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* Cost Summary */
+.cost-summary {
+  background: linear-gradient(135deg, #fef3c7, #fef08a);
+  border: 2px solid #fbbf24;
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+  position: relative;
+  overflow: hidden;
+}
+
+.cost-summary::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -50%;
+  width: 100px;
+  height: 100px;
+  background: radial-gradient(circle, rgba(251, 191, 36, 0.2) 0%, transparent 70%);
+  border-radius: 50%;
+}
+
+.cost-icon {
+  width: 56px;
+  height: 56px;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 24px;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+
+.cost-content {
+  flex: 1;
+}
+
+.cost-label {
+  display: block;
+  font-size: 14px;
+  color: #92400e;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.cost-value {
+  font-size: 28px;
+  font-weight: 800;
+  color: #92400e;
+  line-height: 1;
+}
+
+.cost-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #16a34a;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Session Details */
+.session-details {
+  background: #f8fafc;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.session-details h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 16px;
+}
+
+.details-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-label {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.detail-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+/* Actions */
+.modal-actions {
+  padding: 24px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  gap: 12px;
+}
+
+.btn-secondary1 {
+  flex: 1;
+  background: #f1f5f9;
+  color: #475569;
+  border: 2px solid #e2e8f0;
+  padding: 14px 24px;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+}
+
+.btn-secondary1:hover {
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+}
+
+.btn-primary {
+  flex: 2;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: white;
+  border: none;
+  padding: 14px 32px;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #2563eb, #1e40af);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
+}
+
+/* Mobile Responsive */
+@media (max-width: 640px) {
+  .charging-complete-modal {
+    margin: 10px;
+    border-radius: 20px;
+  }
+  
+  .modal-header {
+    padding: 30px 20px 20px;
+  }
+  
+  .modal-header h2 {
+    font-size: 24px;
+  }
+  
+  .stats-grid {
+    grid-template-columns: 1fr; /* 1 cột trên mobile */
+    gap: 12px;
+  }
+  
+  .cost-summary {
+    flex-direction: column;
+    text-align: center;
+    gap: 12px;
+  }
+  
+  .details-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  
+  .modal-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .btn-secondary1,
+  .btn-primary {
+    flex: none;
+  }
+}
+
+/* Tablet */
+@media (max-width: 768px) and (min-width: 641px) {
+  .stats-grid {
+    grid-template-columns: repeat(3, 1fr); /* Vẫn 3 cột trên tablet */
+    gap: 12px;
+  }
+  
+  .stat-card {
+    padding: 16px 12px; /* Giảm padding trên tablet */
+  }
+}
+
+/* Animation delays for staggered effect */
+.stat-card:nth-child(1) { animation-delay: 0.1s; }
+.stat-card:nth-child(2) { animation-delay: 0.2s; }
+.stat-card:nth-child(3) { animation-delay: 0.3s; }
+
+.stat-card {
+  animation: cardSlideUp 0.5s ease both;
+}
+
+@keyframes cardSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

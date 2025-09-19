@@ -99,6 +99,16 @@ body {
   gap: 20px;
 }
 
+.charging-history-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.charging-history-section .charging-history:first-child {
+  margin-top: 0;
+}
+
 /* Responsive Design */
 @media (max-width: 1400px) {
   .app-content {

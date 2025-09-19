@@ -1,6 +1,7 @@
 import { logger } from '../utils/logger.js';
 import { getTimestamp } from '../utils/time.js';
 import { realtimeService } from '../services/realtime.js';
+import { firestoreService } from '../services/firestore.js';
 import { CONNECTOR_STATUS, TRANSACTION_STATUS } from '../domain/constants.js';
 
 class SessionManager {
@@ -21,7 +22,11 @@ class SessionManager {
         firmware: stationInfo.firmwareVersion || null,
         serialNumber: stationInfo.serialNumber || null,
         ownerId: stationInfo.ownerId || null,
-        stationName: stationInfo.stationName || null
+        stationName: stationInfo.stationName || null,
+        // Location information
+        address: stationInfo.address || null,
+        latitude: stationInfo.latitude || null,
+        longitude: stationInfo.longitude || null
       },
       connectors: new Map(), // connectorId -> ConnectorSession
       lastSeen: getTimestamp(),
@@ -32,16 +37,19 @@ class SessionManager {
 
     this.stations.set(stationId, station);
     
-    // Cập nhật theo cấu trúc mới của realtime
+    // Cập nhật theo cấu trúc mới của realtime với location info
     realtimeService.updateStationOnline(stationId, true, {
       ownerId: station.info.ownerId,
       stationName: station.info.stationName,
       vendor: station.info.vendor,
       model: station.info.model,
-      firmwareVersion: station.info.firmware
+      firmwareVersion: station.info.firmware,
+      address: station.info.address,
+      latitude: station.info.latitude,
+      longitude: station.info.longitude
     });
     
-    logger.info(`Station session created: ${stationId}`);
+    logger.info(`Station session created: ${stationId} at ${station.info.address} (${station.info.latitude}, ${station.info.longitude})`);
     return station;
   }
 
@@ -71,13 +79,16 @@ class SessionManager {
       station.info = { ...station.info, ...info };
       logger.debug(`Station info updated: ${stationId}`, station.info);
       
-      // Cập nhật thông tin trạm sạc theo cấu trúc mới
+      // Cập nhật thông tin trạm sạc theo cấu trúc mới bao gồm location
       realtimeService.updateStationInfo(stationId, {
         ownerId: station.info.ownerId,
         stationName: station.info.stationName,
         vendor: station.info.vendor,
         model: station.info.model,
-        firmwareVersion: station.info.firmware
+        firmwareVersion: station.info.firmware,
+        address: station.info.address,
+        latitude: station.info.latitude,
+        longitude: station.info.longitude
       });
     }
   }
@@ -204,14 +215,28 @@ class SessionManager {
 
     logger.info(`Connector ${stationId}/${connectorId} status: ${statusData.status}`);
     
-    // Cập nhật theo cấu trúc mới
-    realtimeService.updateConnectorStatus(stationId, connectorId, {
+    // Prepare data for Firebase realtime update
+    const realtimeData = {
       status: statusData.status,
       errorCode: connector.errorCode,
       txId: connector.currentTransaction,
       Wh_total: statusData.Wh_total,
       W_now: statusData.W_now
-    });
+    };
+
+    // Include safety check data if present
+    if (statusData.safetyCheck) {
+      realtimeData.safetyCheck = statusData.safetyCheck;
+      logger.info(`🔒 Safety check data being saved to Firebase for ${stationId}/${connectorId}:`, statusData.safetyCheck);
+    }
+
+    // Include additional info if present
+    if (statusData.info) {
+      realtimeData.info = statusData.info;
+    }
+
+    // Cập nhật Firebase theo cấu trúc mới
+    realtimeService.updateConnectorStatus(stationId, connectorId, realtimeData);
   }
 
   getStationConnectors(stationId) {
@@ -235,7 +260,7 @@ class SessionManager {
   }
 
   // Transaction management
-  startTransaction(stationId, connectorId, transactionData) {
+  async startTransaction(stationId, connectorId, transactionData) {
     const station = this.stations.get(stationId);
     const connector = this.ensureConnector(stationId, connectorId);
     
@@ -273,19 +298,49 @@ class SessionManager {
     connector.currentTransaction = transaction.id;
     connector.status = CONNECTOR_STATUS.CHARGING;
 
-    // Cập nhật transaction ID trong realtime
-    realtimeService.updateConnectorTransaction(stationId, connectorId, transaction.id);
-    realtimeService.updateConnectorStatus(stationId, connectorId, {
+    // Cập nhật transaction ID và userId trong realtime
+    await realtimeService.startTransaction(stationId, connectorId, transaction.id, transactionData.meterStart, transactionData.userId);
+    await realtimeService.updateConnectorStatus(stationId, connectorId, {
       status: CONNECTOR_STATUS.CHARGING,
       errorCode: 'NoError',
       txId: transaction.id
     });
 
+    // Lưu charging session vào Firestore
+    try {
+      const chargingSessionData = {
+        id: transaction.id,
+        stationId: transaction.stationId,
+        connectorId: transaction.connectorId,
+        userId: transaction.idTag, // Sử dụng idTag làm userId tạm thời
+        ownerId: station.info.ownerId,
+        stationName: station.info.stationName || stationId,
+        startTime: transaction.startTime,
+        meterStart: transaction.meterStart,
+        status: 'active',
+        meterValues: [],
+        // Thông tin trạm sạc
+        stationInfo: {
+          vendor: station.info.vendor,
+          model: station.info.model,
+          address: station.info.address,
+          latitude: station.info.latitude,
+          longitude: station.info.longitude
+        }
+      };
+      
+      await firestoreService.saveChargingSession(chargingSessionData);
+      logger.info(`Charging session saved to Firestore: ${transaction.id}`);
+    } catch (error) {
+      logger.error(`Failed to save charging session to Firestore: ${error.message}`);
+      // Không throw error để không làm gián đoạn transaction
+    }
+
     logger.info(`Transaction started: ${transaction.id} on ${stationId}/${connectorId}`);
     return transaction;
   }
 
-  stopTransaction(stationId, transactionId, stopData) {
+  async stopTransaction(stationId, transactionId, stopData) {
     const transaction = this.transactions.get(transactionId);
     if (!transaction) {
       logger.error(`Transaction not found: ${transactionId}`);
@@ -316,9 +371,10 @@ class SessionManager {
     station.transactions.delete(transactionId);
     connector.currentTransaction = null;
     connector.status = CONNECTOR_STATUS.AVAILABLE;
-
-    // Cập nhật realtime - clear transaction và status
-    realtimeService.updateConnectorStatus(stationId, transaction.connectorId, {
+ 
+    // Cập nhật realtime - clear transaction ID và reset session data
+    await realtimeService.updateConnectorTransaction(stationId, transaction.connectorId, null);
+    await realtimeService.updateConnectorStatus(stationId, transaction.connectorId, {
       status: CONNECTOR_STATUS.AVAILABLE,
       errorCode: 'NoError',
       txId: null,
@@ -326,8 +382,43 @@ class SessionManager {
       W_now: 0
     });
 
+    // Cập nhật charging session trong Firestore khi hoàn thành
+    try {
+      const updateData = {
+        meterStop: transaction.meterStop,
+        stopTime: transaction.stopTime,
+        reason: transaction.reason,
+        status: 'completed',
+        duration: transaction.duration,
+        energyConsumed: transaction.energyConsumed,
+        // Tính toán chi phí ước tính
+        estimatedCost: await this.calculateSessionCost(transaction)
+      };
+      
+      await firestoreService.updateChargingSession(transaction.id, updateData);
+      logger.info(`Charging session completed and updated in Firestore: ${transaction.id}`);
+    } catch (error) {
+      logger.error(`Failed to update charging session in Firestore: ${error.message}`);
+      // Không throw error để không làm gián đoạn transaction
+    }
+
     logger.info(`Transaction stopped: ${transactionId} on ${stationId}/${transaction.connectorId}`);
     return transaction;
+  }
+
+  // Tính toán chi phí cho session
+  async calculateSessionCost(transaction) {
+    try {
+      const pricePerKwh = await firestoreService.getPricePerKwh();
+      if (pricePerKwh && transaction.energyConsumed > 0) {
+        const energyInKwh = transaction.energyConsumed / 1000; // Convert Wh to kWh
+        return Math.round(energyInKwh * pricePerKwh);
+      }
+      return 0;
+    } catch (error) {
+      logger.error('Error calculating session cost:', error);
+      return 0;
+    }
   }
 
   forceStopTransaction(transactionId, reason = 'Other') {
@@ -422,6 +513,24 @@ class SessionManager {
         if (Wh_total > 0) {
           transaction.energyConsumed = Wh_total - transaction.meterStart;
         }
+
+        // Lưu meter values quan trọng vào Firestore (mỗi 10 lần hoặc meter value cuối cùng)
+        try {
+          // Chỉ lưu mỗi 10 meter values để tránh quá tải
+          if (transaction.meterValues.length % 10 === 0) {
+            const meterValueData = {
+              timestamp: meterValues[meterValues.length - 1]?.timestamp || new Date().toISOString(),
+              energyWh: Wh_total,
+              powerW: W_now,
+              energyConsumed: transaction.energyConsumed
+            };
+            
+            firestoreService.addMeterValueToSession(transactionId, meterValueData)
+              .catch(error => logger.error(`Failed to save meter value to Firestore: ${error.message}`));
+          }
+        } catch (error) {
+          logger.error('Error processing meter value for Firestore:', error);
+        }
       }
     }
 
@@ -501,6 +610,55 @@ class SessionManager {
       totalTransactions,
       timestamp: getTimestamp()
     };
+  }
+
+  // Phương thức hỗ trợ kiểm tra số dư trong quá trình sạc
+  getCurrentMeterValues(stationId, connectorId) {
+    const connector = this.getConnector(stationId, connectorId);
+    if (!connector || !connector.meterValues.length) {
+      return null;
+    }
+
+    // Lấy giá trị meterValue mới nhất
+    const latestMeterValue = connector.meterValues[connector.meterValues.length - 1];
+    
+    // Tìm giá trị Energy.Active.Import.Register từ meter values
+    if (latestMeterValue && latestMeterValue.sampledValue) {
+      for (const sample of latestMeterValue.sampledValue) {
+        if (sample.measurand === 'Energy.Active.Import.Register') {
+          return parseFloat(sample.value) || 0;
+        }
+      }
+    }
+    
+    return 0;
+  }
+
+  // Cập nhật trạng thái transaction
+  setTransactionStatus(stationId, transactionId, status) {
+    const transaction = this.transactions.get(transactionId);
+    if (transaction) {
+      transaction.status = status;
+      logger.info(`Transaction ${transactionId} status updated to: ${status}`);
+      
+      // Cập nhật vào Firebase nếu cần
+      try {
+        realtimeService.updateTransactionStatus(stationId, transactionId, status);
+      } catch (error) {
+        logger.error(`Error updating transaction status in Firebase:`, error);
+      }
+    }
+  }
+
+  // Lấy thông tin transaction với stationId (để tương thích với code mới)
+  getTransaction(stationId, transactionId) {
+    if (typeof stationId === 'number' || (typeof stationId === 'string' && !transactionId)) {
+      // Nếu chỉ có 1 tham số hoặc tham số đầu là số, đó là transactionId
+      return this.transactions.get(Number(stationId));
+    }
+    
+    // Nếu có cả stationId và transactionId
+    return this.transactions.get(Number(transactionId));
   }
 }
 

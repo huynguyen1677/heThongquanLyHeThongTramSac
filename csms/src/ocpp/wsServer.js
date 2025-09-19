@@ -7,6 +7,10 @@ import { sessions } from './sessions.js';
 import { generateUID } from '../utils/uid.js';
 import { getTimestamp } from '../utils/time.js';
 import { connectorService } from '../services/connectorService.js';
+import { syncService } from '../services/syncService.js';
+import { realtimeService } from '../services/realtime.js';
+import { BalanceUpdater } from '../payments/balanceUpdater.js';
+import { CostCalculator } from '../payments/costCalculator.js';
 
 export class OcppWebSocketServer {
   constructor(options = {}) {
@@ -162,13 +166,16 @@ export class OcppWebSocketServer {
         this.handleAuthorize(stationId, messageId, payload);
         break;
       case 'StartTransaction':
-        this.handleStartTransaction(stationId, messageId, payload);
+        await this.handleStartTransaction(stationId, messageId, payload);
         break;
       case 'StopTransaction':
-        this.handleStopTransaction(stationId, messageId, payload);
+        await this.handleStopTransaction(stationId, messageId, payload);
         break;
       case 'MeterValues':
         this.handleMeterValues(stationId, messageId, payload);
+        break;
+      case 'DataTransfer':
+        await this.handleDataTransfer(stationId, messageId, payload);
         break;
       default:
         this.sendCallError(stationId, messageId, 'NotSupported', `Action ${action} not supported`);
@@ -189,15 +196,40 @@ export class OcppWebSocketServer {
     logger.info(`BootNotification from ${stationId}:`, payload);
     
     try {
-      // Update station info
-      sessions.updateStationInfo(stationId, {
+      // Update station info including location data
+      const stationInfo = {
         vendor: payload.chargePointVendor,
         model: payload.chargePointModel,
         firmware: payload.firmwareVersion,
         serialNumber: payload.chargePointSerialNumber,
         lastBootTime: getTimestamp()
-      });
-      logger.info(`✅ Updated station info for ${stationId}`);
+      };
+
+      // Add location information if provided
+      if (payload.stationName) {
+        stationInfo.stationName = payload.stationName;
+      }
+      if (payload.address) {
+        stationInfo.address = payload.address;
+      }
+      if (payload.latitude && payload.longitude) {
+        stationInfo.latitude = payload.latitude;
+        stationInfo.longitude = payload.longitude;
+      }
+      
+      // Add ownerId if provided
+      if (payload.ownerId) {
+        stationInfo.ownerId = payload.ownerId;
+        logger.info(`✅ Added ownerId: ${payload.ownerId} for station ${stationId}`);
+      }
+
+      sessions.updateStationInfo(stationId, stationInfo);
+      
+      if (payload.latitude && payload.longitude) {
+        logger.info(`✅ Updated station info for ${stationId} with location: ${payload.stationName} at ${payload.address} (${payload.latitude}, ${payload.longitude})`);
+      } else {
+        logger.info(`✅ Updated station info for ${stationId}`);
+      }
 
       // Initialize persistent connectors using connector service
       try {
@@ -221,6 +253,25 @@ export class OcppWebSocketServer {
       logger.info(`📤 About to send BootNotification response: ${JSON.stringify(response)}`);
       this.sendCallResult(stationId, messageId, response);
       logger.info(`✅ BootNotification response sent successfully for ${stationId}`);
+
+      // Sync station data to Firestore khi có kết nối mới
+      if (syncService && syncService.isRunning && realtimeService.isAvailable()) {
+        try {
+          const liveData = await realtimeService.getStationLiveData(stationId);
+          if (liveData) {
+            // Thêm thông tin owner nếu có trong boot notification
+            if (payload.ownerId) {
+              liveData.ownerId = payload.ownerId;
+            }
+            
+            await syncService.syncOnStationConnect(stationId, liveData);
+            logger.info(`✅ Synced station ${stationId} to Firestore on boot`);
+          }
+        } catch (syncError) {
+          logger.error(`❌ Failed to sync station ${stationId} on boot:`, syncError);
+          // Don't fail the boot notification if sync fails
+        }
+      }
       
     } catch (error) {
       logger.error(`❌ Error in handleBootNotification for ${stationId}:`, error);
@@ -255,13 +306,26 @@ export class OcppWebSocketServer {
   handleStatusNotification(stationId, messageId, payload) {
     logger.info(`StatusNotification from ${stationId}:`, payload);
     
-    // Update connector status
-    sessions.updateConnectorStatus(stationId, payload.connectorId, {
+    // Prepare connector status data for sessions
+    const statusData = {
       status: payload.status,
       errorCode: payload.errorCode,
       timestamp: payload.timestamp || getTimestamp(),
       info: payload.info
-    });
+    };
+
+    // Include safety check data if present (for Preparing status)
+    if (payload.safetyCheck) {
+      statusData.safetyCheck = payload.safetyCheck;
+      logger.info(`🔒 Safety check data received for ${stationId}/${payload.connectorId}:`, payload.safetyCheck);
+    }
+
+    // Include any additional metadata from simulator
+    if (payload.Wh_total !== undefined) statusData.Wh_total = payload.Wh_total;
+    if (payload.W_now !== undefined) statusData.W_now = payload.W_now;
+    
+    // Update connector status in sessions (which will update Firebase)
+    sessions.updateConnectorStatus(stationId, payload.connectorId, statusData);
 
     this.sendCallResult(stationId, messageId, {});
   }
@@ -279,36 +343,233 @@ export class OcppWebSocketServer {
     this.sendCallResult(stationId, messageId, response);
   }
 
-  handleStartTransaction(stationId, messageId, payload) {
+  async handleStartTransaction(stationId, messageId, payload) {
+    logger.info(`🚀 START TRANSACTION DEBUG - Station: ${stationId}, MessageID: ${messageId}`);
+    logger.info(`🚀 START TRANSACTION PAYLOAD:`, JSON.stringify(payload, null, 2));
     logger.info(`StartTransaction from ${stationId}:`, payload);
+    logger.info(`🔍 Received idTag: ${payload.idTag}`);
     
-    // Generate transaction ID
-    const transactionId = Date.now();
-    
-    // Update session
-    sessions.startTransaction(stationId, payload.connectorId, {
-      transactionId,
-      idTag: payload.idTag,
-      meterStart: payload.meterStart,
-      startTime: payload.timestamp,
-      reservationId: payload.reservationId
-    });
-
-    const response = {
-      transactionId,
-      idTagInfo: {
-        status: 'Accepted'
+    try {
+      // 1. Kiểm tra user có tồn tại trong database không
+      const userExists = await this.checkUserExists(payload.idTag);
+      if (!userExists) {
+        logger.warn(`❌ User ${payload.idTag} does not exist`);
+        const response = {
+          transactionId: 0,
+          idTagInfo: {
+            status: 'Invalid'
+          }
+        };
+        this.sendCallResult(stationId, messageId, response);
+        return;
       }
-    };
 
-    this.sendCallResult(stationId, messageId, response);
+      // 2. Ước tính chi phí sạc tối đa và kiểm tra số dư
+      const estimatedCost = await this.estimateMaxChargingCost(payload.idTag, stationId, payload.connectorId);
+      const balanceCheck = await this.checkSufficientBalance(payload.idTag, estimatedCost);
+      
+      if (!balanceCheck.sufficient) {
+        logger.warn(`❌ Insufficient balance for ${payload.idTag}. Required: ${estimatedCost}, Available: ${balanceCheck.currentBalance}`);
+        
+        // Gửi thông báo không đủ số dư cho user qua realtime
+        try {
+          await this.realtimeService.sendNotificationToUser(payload.idTag, {
+            type: 'insufficient_balance',
+            title: 'Số dư không đủ',
+            message: `Số dư hiện tại: ${balanceCheck.currentBalance.toLocaleString()} VND. Cần tối thiểu: ${estimatedCost.toLocaleString()} VND để bắt đầu sạc.`,
+            data: {
+              currentBalance: balanceCheck.currentBalance,
+              requiredAmount: estimatedCost,
+              stationId,
+              connectorId: payload.connectorId
+            }
+          });
+        } catch (notifError) {
+          logger.error('Error sending insufficient balance notification:', notifError);
+        }
+        
+        const response = {
+          transactionId: 0,
+          idTagInfo: {
+            status: 'Blocked',
+            info: `Insufficient balance. Current: ${balanceCheck.currentBalance.toLocaleString()} VND, Required: ${estimatedCost.toLocaleString()} VND`
+          }
+        };
+        this.sendCallResult(stationId, messageId, response);
+        return;
+      }
+
+      logger.info(`✅ Balance check passed for ${payload.idTag}. Balance: ${balanceCheck.currentBalance}, Estimated cost: ${estimatedCost}`);
+
+      // 3. Gửi thông báo xác nhận đến User App và chờ phản hồi
+      const userConfirmed = await this.requestUserConfirmation(payload.idTag, stationId, payload.connectorId);
+      
+      if (!userConfirmed) {
+        logger.warn(`❌ User ${payload.idTag} did not confirm charging`);
+        // User từ chối - Reject transaction
+        const response = {
+          transactionId: 0,
+          idTagInfo: {
+            status: 'Blocked'
+          }
+        };
+        this.sendCallResult(stationId, messageId, response);
+        return;
+      }
+
+      // 4. User đồng ý và có đủ tiền - Tiếp tục tạo transaction
+      const transactionId = Date.now();
+      
+      logger.info(`✅ Starting transaction ${transactionId} for ${payload.idTag} at ${stationId}/${payload.connectorId}`);
+      
+      // Update session with userId from idTag
+      await sessions.startTransaction(stationId, payload.connectorId, {
+        transactionId,
+        idTag: payload.idTag,
+        userId: payload.idTag,
+        meterStart: payload.meterStart,
+        startTime: payload.timestamp,
+        reservationId: payload.reservationId,
+        estimatedCost: estimatedCost // Lưu chi phí ước tính
+      });
+
+      const response = {
+        transactionId,
+        idTagInfo: {
+          status: 'Accepted'
+        }
+      };
+
+      this.sendCallResult(stationId, messageId, response);
+      
+    } catch (error) {
+      logger.error(`Error processing StartTransaction:`, error);
+      const response = {
+        transactionId: 0,
+        idTagInfo: {
+          status: 'Invalid'
+        }
+      };
+      this.sendCallResult(stationId, messageId, response);
+    }
   }
 
-  handleStopTransaction(stationId, messageId, payload) {
+  // Helper functions for user confirmation flow
+  async checkUserExists(userId) {
+    try {
+      logger.info(`🔍 Checking if user ${userId} exists...`);
+      
+      // Tạm thời return true để test flow confirmation
+      // TODO: Implement proper Firestore query when ready
+      logger.info(`✅ User ${userId} validation bypassed for testing`);
+      return true;
+      
+    } catch (error) {
+      logger.error(`Error checking user ${userId}:`, error);
+      return false;
+    }
+  }
+
+  // Ước tính chi phí sạc tối đa
+  async estimateMaxChargingCost(userId, stationId, connectorId) {
+    try {
+      // Ước tính chi phí cho 1 giờ sạc với công suất trung bình 7kW
+      const estimatedEnergyKwh = 7; // kWh
+      const estimatedDuration = 3600; // 1 giờ
+      
+      const mockSessionData = {
+        energyConsumed: estimatedEnergyKwh * 1000, // chuyển sang Wh
+        duration: estimatedDuration,
+        stationId: stationId,
+        connectorId: connectorId
+      };
+
+      const estimatedCost = await CostCalculator.calculateSessionCost(mockSessionData);
+      logger.info(`💰 Estimated max cost for ${userId} at ${stationId}: ${estimatedCost.totalCost} VND`);
+      
+      return estimatedCost.totalCost;
+    } catch (error) {
+      logger.error(`Error estimating charging cost:`, error);
+      // Fallback: 50,000 VND
+      return 50000;
+    }
+  }
+
+  // Kiểm tra số dư trước khi bắt đầu sạc
+  async checkSufficientBalance(userId, estimatedCost) {
+    try {
+      const balanceCheck = await BalanceUpdater.checkSufficientBalance(userId, estimatedCost);
+      logger.info(`💳 Balance check for ${userId}:`, {
+        currentBalance: balanceCheck.currentBalance,
+        requiredAmount: balanceCheck.requiredAmount,
+        sufficient: balanceCheck.sufficient
+      });
+      
+      return balanceCheck;
+    } catch (error) {
+      logger.error(`Error checking balance for ${userId}:`, error);
+      return { sufficient: false, currentBalance: 0, requiredAmount: estimatedCost };
+    }
+  }
+
+  async requestUserConfirmation(userId, stationId, connectorId) {
+    try {
+      // Import dynamic để tránh lỗi ES module
+      const { realtimeService } = await import('../services/realtime.js');
+      const confirmationData = {
+        userId,
+        stationId, 
+        connectorId,
+        timestamp: new Date().toISOString(),
+        status: 'pending'
+      };
+
+      logger.info(`[DEBUG] Ghi xác nhận sạc cho userId: ${userId}`, confirmationData);
+      await realtimeService.saveChargingConfirmation(userId, confirmationData);
+      logger.info(`[DEBUG] Đã ghi xác nhận sạc cho userId: ${userId}`);
+
+      // Chờ phản hồi từ user trong 30 giây
+      const confirmed = await this.waitForUserResponse(userId, 30000);
+      return confirmed;
+    } catch (error) {
+      logger.error(`💥 Error requesting user confirmation:`, error && error.stack ? error.stack : error);
+      logger.error(`💥 Error type:`, typeof error);
+      logger.error(`💥 Error constructor:`, error.constructor?.name);
+      logger.error(`💥 Error message:`, error?.message);
+      logger.error(`💥 Error code:`, error?.code);
+      logger.error(`💥 Error details:`, error?.details);
+      logger.error(`💥 Error JSON:`, JSON.stringify(error, null, 2));
+      return false;
+    }
+  }
+
+  async waitForUserResponse(userId, timeoutMs) {
+    return new Promise(async (resolve) => {
+      // Import dynamic để tránh lỗi ES module
+      const { realtimeService } = await import('../services/realtime.js');
+      let timeoutId;
+      let listenerUnsubscribe;
+
+      // Set timeout
+      timeoutId = setTimeout(() => {
+        if (listenerUnsubscribe) listenerUnsubscribe();
+        resolve(false); // Timeout - user didn't respond
+      }, timeoutMs);
+
+      // Listen for user response
+      listenerUnsubscribe = realtimeService.listenForChargingResponse(userId, (response) => {
+        clearTimeout(timeoutId);
+        if (listenerUnsubscribe) listenerUnsubscribe();
+        resolve(response === 'accepted');
+      });
+    });
+  }
+
+  async handleStopTransaction(stationId, messageId, payload) {
     logger.info(`StopTransaction from ${stationId}:`, payload);
     
     // Update session
-    sessions.stopTransaction(stationId, payload.transactionId, {
+    await sessions.stopTransaction(stationId, payload.transactionId, {
       meterStop: payload.meterStop,
       stopTime: payload.timestamp,
       reason: payload.reason,
@@ -330,7 +591,113 @@ export class OcppWebSocketServer {
     // Store meter values
     sessions.addMeterValues(stationId, payload.connectorId, payload.meterValue, payload.transactionId);
 
+    // Kiểm tra số dư định kỳ nếu có transaction đang chạy
+    if (payload.transactionId) {
+      this.checkBalanceDuringCharging(stationId, payload.transactionId, payload.connectorId)
+        .catch(error => {
+          logger.error(`Error checking balance during charging:`, error);
+        });
+    }
+
     this.sendCallResult(stationId, messageId, {});
+  }
+
+  // Kiểm tra số dư trong quá trình sạc
+  async checkBalanceDuringCharging(stationId, transactionId, connectorId) {
+    try {
+      // Lấy thông tin transaction hiện tại
+      const sessionData = sessions.getTransaction(stationId, transactionId);
+      if (!sessionData || !sessionData.userId) {
+        return;
+      }
+
+      // Tính chi phí hiện tại dựa trên meterValues
+      const currentMeterValues = sessions.getCurrentMeterValues(stationId, connectorId);
+      if (!currentMeterValues || !sessionData.meterStart) {
+        return;
+      }
+
+      // Tính năng lượng đã tiêu thụ (Wh)
+      const energyConsumed = currentMeterValues - sessionData.meterStart;
+      const duration = Date.now() - new Date(sessionData.startTime).getTime();
+
+      if (energyConsumed <= 0) {
+        return; // Chưa có tiêu thụ năng lượng
+      }
+
+      // Tính chi phí hiện tại
+      const currentSessionData = {
+        energyConsumed: energyConsumed,
+        duration: Math.floor(duration / 1000), // chuyển sang giây
+        stationId: stationId,
+        connectorId: connectorId
+      };
+
+      const currentCost = await CostCalculator.calculateSessionCost(currentSessionData);
+      
+      // Kiểm tra số dư
+      const balanceCheck = await this.checkSufficientBalance(sessionData.userId, currentCost.totalCost);
+      
+      if (!balanceCheck.sufficient) {
+        logger.warn(`❌ Insufficient balance during charging for ${sessionData.userId}. Current cost: ${currentCost.totalCost}, Available: ${balanceCheck.currentBalance}`);
+        
+        // Tự động dừng sạc
+        logger.info(`🛑 Auto-stopping transaction ${transactionId} due to insufficient balance`);
+        
+        // Gửi lệnh dừng sạc tới charging station
+        this.sendRemoteStopTransaction(stationId, transactionId);
+        
+        // Cập nhật trạng thái trong session
+        sessions.setTransactionStatus(stationId, transactionId, 'StoppedBySystem');
+        
+        // Gửi thông báo đến user
+        try {
+          const { realtimeService } = await import('../services/realtime.js');
+          await realtimeService.sendNotification(sessionData.userId, {
+            type: 'charging_stopped',
+            message: 'Charging stopped due to insufficient balance',
+            transactionId: transactionId,
+            currentCost: currentCost.totalCost,
+            timestamp: new Date().toISOString()
+          });
+        } catch (notificationError) {
+          logger.error(`Error sending notification:`, notificationError);
+        }
+      }
+      
+    } catch (error) {
+      logger.error(`Error in checkBalanceDuringCharging:`, error);
+    }
+  }
+
+  async handleDataTransfer(stationId, messageId, payload) {
+    logger.info(`DataTransfer from ${stationId}:`, payload);
+    
+    try {
+      if (payload.vendorId === 'RealtimeUpdate' && payload.messageId === 'ChargeThreshold') {
+        const data = JSON.parse(payload.data);
+        
+        // Cập nhật ngưỡng sạc đầy lên Firebase Realtime Database
+        await realtimeService.updateConnectorThreshold(
+          stationId,
+          data.connectorId,
+          data.fullChargeThresholdKwh,
+          data.currentEnergyKwh,
+          data.duration,
+          data.estimatedCost,
+          data.powerKw
+        );
+        
+        logger.info(`✅ Updated charge threshold for ${stationId}/${data.connectorId}: ${data.fullChargeThresholdKwh}kWh`);
+        
+        this.sendCallResult(stationId, messageId, { status: 'Accepted' });
+      } else {
+        this.sendCallResult(stationId, messageId, { status: 'UnknownVendorId' });
+      }
+    } catch (error) {
+      logger.error(`❌ Error processing DataTransfer from ${stationId}:`, error);
+      this.sendCallResult(stationId, messageId, { status: 'Rejected' });
+    }
   }
 
   handleDisconnection(stationId) {
